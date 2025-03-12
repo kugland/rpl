@@ -1,0 +1,479 @@
+#!/usr/bin/env perl
+
+# Copyright (c) 2025 André Kugland
+#
+# Permission is hereby granted, free of charge, to any person obtaining a
+# copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation the
+# rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+# sell copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+# THE SOFTWARE.
+
+use 5.036;
+use strict;
+use warnings;
+use utf8;
+
+use English              qw{ -no_match_vars };
+use Encode               ();
+use Getopt::Long::Parser ();
+use List::Util           qw{ max };
+use File::Basename       qw{ basename dirname };
+
+use version 0.77 ();
+our $VERSION = version->declare('v3.1.0');
+
+my $help_message = <<~";;";
+  rpl @{[ $VERSION->stringify() ]} - Rename files using Perl expressions
+
+  Usage: rpl [OPTIONS] [FILES...]
+
+    -e, --expr=EXPR         Perl expression to apply (can be used multiple times)
+    -s, --script=FILE       Read Perl expressions from a file (- for stdin)
+    -p, --prebaked=NAME     Use a prebaked expression (see --list-prebaked)
+    -f, --from-file=FILE    Read list of files to rename from FILE (- for stdin)
+    -d, --delim=CHAR        Set delimiter for --from-file (default: newline)
+    -0, --null              Use NUL as delimiter for --from-file
+    -c, --from-charset=ENC  Decode filenames from charset (e.g. latin1, utf-16le)
+    -t, --to-charset=ENC    Encode filenames to charset (e.g. latin1, utf-16le)
+    -b, --basename          Exclude directory part of the filename
+    -x, --exclude-ext       Keep original file extension unchanged
+    -o, --overwrite         Overwrite existing files
+    -C, --check-collisions  Check for collisions (default is on)
+    -a, --apply             Actually perform renames (default is dry-run)
+    -m, --mkdirp            Create directories as needed
+    -v, --verbose           Be more verbose (can be used multiple times)
+    -q, --quiet             Be less verbose (can be used multiple times)
+    -h, --help              Show this help message
+    -V, --version           Show version information
+    -l, --list-prebaked     List available prebaked expressions
+
+  The boolean options, `--basename', `--exclude-ext', `--overwrite',
+  `--check-collisions', `--apply', and `--mkdirp', can be negated by prefixing
+  them with `no-' (e.g. `--no-apply', `--no-overwrite' etc).
+
+  Examples:
+
+    # Rename all files in the current directory to lowercase.
+    \$ rpl -e 's/\\.txt\$/.md/' *.txt
+
+    # Change the order of artist and song title in all mp3 files.
+    \$ rpl -e 's/^(.+?) - (.+?)\\.mp3\$/\$2 - \$1.mp3/' *.mp3
+
+    # Remove diacritics from all files in a directory.
+    \$ find . -type f -print0 | rpl -0f- --prebaked=strip-diacritics
+
+    All the above examples are dry-runs. To actually rename the files, add the
+    `--apply' / `-a' option.
+  ;;
+
+
+# Parse cli args and return a hashref of options.
+sub params_get {
+  my (@argv) = @_;
+
+  my $params = {
+    exprs            => [],                         # Perl expressions to be applied.
+    files            => [],                         # Files to be renamed.
+    from_charset     => undef,                      # Charset of the names in the files.
+    to_charset       => undef,                      # Charset of the names to be written.
+    basename         => 0,                          # Change the basename only?
+    exclude_ext      => 0,                          # Exclude the extension?
+    check_collisions => 1,                          # Check for collisions?
+    apply            => 0,                          # Apply the changes?
+    mkdirp           => 0,                          # Create directories as needed?
+    overwrite        => 0,                          # Overwrite existing files?
+    verbosity        => 1,                          # Verbosity level.
+  };
+  my $delim = "\n";
+
+  do {
+    my $parser = Getopt::Long::Parser->new();
+    $parser->configure(qw{ no_ignore_case bundling no_auto_abbrev });
+
+    local $SIG{__DIE__} = sub {
+      local $_ = $_[0];
+      s{ \n \z }{}msx;
+      s{ \A . }{\L$&}msx;
+      die "Error: $_.\nTry `rpl --help' for more information.\n";
+    };
+    local $SIG{__WARN__} = sub { die $_[0] };
+
+    $parser->getoptionsfromarray( \@argv,
+      'expr|e=s@'           => \$params->{exprs},
+      'prebaked|p=s'        => sub { push @{ $params->{exprs} }, prebaked_get( $_[1] ); },
+      'script|s=s'          => sub { push @{ $params->{exprs} }, read_file( $_[1], undef ); },
+      'from-file|f=s'       => sub { push @{ $params->{files} }, read_file( $_[1], $delim ); },
+      'delim|d=s'           => \$delim,
+      'null|0'              => sub { $delim = "\0"; },
+      'from-charset|c=s'    => \$params->{from_charset},
+      'to-charset|t=s'      => \$params->{to_charset},
+      'basename|b!'         => \$params->{basename},
+      'exclude-ext|x!'      => \$params->{exclude_ext},
+      'check-collisions|C!' => \$params->{check_collisions},
+      'apply|a!'            => \$params->{apply},
+      'mkdirp|m!'           => \$params->{mkdirp},
+      'overwrite|o!'        => \$params->{overwrite},
+      'help|h'              => sub { say $help_message;                      exit 0; },
+      'version|V'           => sub { say "rpl @{[ $VERSION->stringify() ]}"; exit 0; },
+      'list-prebaked|l'     => sub { prebaked_list();                        exit 0; },
+      'verbose|v+'          => sub { $params->{verbosity}++; },
+      'quiet|q+'            => sub { $params->{verbosity}--; },
+    );
+
+    push @{ $params->{files} }, @argv;              # Remaining arguments are files.
+
+    unless ( @{ $params->{exprs} } or $params->{from_charset} or $params->{to_charset} ) {
+      die "no expressions provided\n";
+    }
+
+    my %seen = ();                                  # Deduplicate the list of files.
+    $params->{files} = [ grep { !$seen{$_}++ } @{ $params->{files} } ];
+
+    die "no files provided\n" unless @{ $params->{files} };
+
+    for my $opt (qw{ from_charset to_charset }) {
+      # Load the charset codec.
+      my $name  = $params->{$opt}              // 'utf-8';
+      my $codec = Encode::find_encoding($name) // do die "unknown charset: `$name'\n";
+      $params->{$opt} = { name => $name, codec => $codec };
+    } ## end for my $opt (qw{ from_charset to_charset })
+
+    $params->{verbosity} = 0 if $params->{verbosity} < 0;  # Clamp verbosity to 0.
+  };
+
+  # Compile the expressions.
+  $params->{exprs} = compile_exprs( @{ $params->{exprs} } );
+
+  return $params;
+} ## end sub params_get
+
+
+# Read a file and return its content as an array of lines.
+# Used by --script and --from-file options.
+sub read_file {
+  my ( $file, $delim ) = @_;
+  die "Invalid delimiter: $delim\n" if defined $delim && length $delim != 1;
+  local $INPUT_RECORD_SEPARATOR = $delim;
+  open my $fh, '<', ( $file ne q{-} ? $file : '/dev/stdin' )
+    or die "Can't open file $file: $OS_ERROR\n";
+  my @lines = <$fh>;
+  close $fh;
+  if ( defined $delim ) {
+    chomp @lines;
+    @lines = grep { $_ ne q{} } @lines;
+  }
+  return @lines;
+} ## end sub read_file
+
+
+# Compile expressions into anonymous subroutines.
+sub compile_exprs {
+  my (@exprs) = @_;
+  my @result = ();
+  state $utf8 = Encode::find_encoding('utf-8');
+  for my $expr (@exprs) {
+    $expr = $utf8->decode($expr) unless utf8::is_utf8($expr);
+    my $code = <<~";;";
+      package Isolated::Eval::Context;
+      sub {
+        no strict; no warnings; use utf8;
+        local \$_ = \$_[0];
+        local \$SIG{__DIE__} = 'DEFAULT';
+        local \$SIG{__WARN__} = 'DEFAULT';
+      # line 1 __EXPR_FUNC__
+        $expr
+        ;return \$_;
+      }
+      ;;
+    my $func = do {
+      local $SIG{__DIE__} = 'DEFAULT';
+      eval $code; ## no critic (ProhibitStringyEval, RequireCheckingReturnValueOfEval)
+    } // do {
+      my $err = $EVAL_ERROR;
+      $err =~ s{ \Q at __EXPR_FUNC__ line \E \d+ .* }{}msx;
+      die "Compilation failed for expr `$expr':\n$err\n";
+    };
+    push @result, { expr => $expr, func => $func };
+  } ## end for my $expr (@exprs)
+  return \@result;
+} ## end sub compile_exprs
+
+
+# Prebaked expressions.
+my %PREBAKED_EXPRESSIONS = (
+  'collapse-blanks' => [
+    'Collapse consecutive blanks, trim leading/trailing blanks',
+    's/ \A \s+ //msx',
+    's/ \s+ \z //msx',
+    's/ \s\s* / /gmsx',
+  ],
+  'normalize-nfc' => [
+    'Normalize Unicode to canonical composition (NFC)',
+    'BEGIN { require Unicode::Normalize }',
+    '$_ = Unicode::Normalize::normalize( "C", $_ )',
+  ],
+  'normalize-nfd' => [
+    'Normalize Unicode to canonical decomposition (NFD)',
+    'BEGIN { require Unicode::Normalize }',
+    '$_ = Unicode::Normalize::normalize( "D", $_ )',
+  ],
+  'normalize-nfkc' => [
+    'Normalize Unicode to compatibility composition (NFKC)',
+    'BEGIN { require Unicode::Normalize }',
+    '$_ = Unicode::Normalize::normalize( "KC", $_ )',
+  ],
+  'normalize-nfkd' => [
+    'Normalize Unicode to compatibility decomposition (NFKD)',
+    'BEGIN { require Unicode::Normalize }',
+    '$_ = Unicode::Normalize::normalize( "KD", $_ )',
+  ],
+  'strip-diacritics' => [
+    'Remove diacritics from names',
+    'BEGIN { require Unicode::Normalize }',
+    '$_ = Unicode::Normalize::normalize( "D", $_ ); s/ \pM //gmsx',
+  ],
+  'trim' => [
+    'Trim leading/trailing whitespace',
+    's/ \A \s+ //msx',
+    's/ \s+ \z //msx',
+  ],
+  'unidecode' => [
+    'Convert Unicode characters to ASCII using Text::Unidecode',
+    'BEGIN { require Text::Unidecode }',
+    '$_ = Text::Unidecode::unidecode( $_ )',
+  ],
+  'windows-fullwidth' => [
+    'Full-width replacements for chars forbidden in Windows',
+    's{ ["*:<>?\x5c|] }{ chr( ord( $& ) + 0xfee0 ) }egmsx',
+  ],
+  'windows-fullwidth-rev' => [
+    'Reverse full-width replacements for chars forbidden in Windows',
+    's{ [＂＊：＜＞？＼｜] }{ chr( ord( $& ) - 0xfee0 ) }egmsx',
+  ],
+);
+
+
+# Get the expression with the given name.
+sub prebaked_get {
+  my ($name) = @_;
+  die "Unknown prebaked expression: $name" unless exists $PREBAKED_EXPRESSIONS{$name};
+  my ( $desc, @exprs ) = @{ $PREBAKED_EXPRESSIONS{$name} };
+  return join q{; }, @exprs;
+} ## end sub prebaked_get
+
+
+# List all available prebaked expressions.
+sub prebaked_list {
+  say q{The following prebaked expressions are available:};
+  say q{};
+  my $colwidth = max map { length $_ } keys %PREBAKED_EXPRESSIONS;
+  for my $name ( sort keys %PREBAKED_EXPRESSIONS ) {
+    my ( $desc, @exprs ) = @{ $PREBAKED_EXPRESSIONS{$name} };
+    printf "  %s %s %s\n", $name,     q{ } x ( $colwidth - length $name ), $desc;
+    printf "  %-*s  %s\n", $colwidth, q{},                                 $_ for (@exprs);
+    say q{};
+  } ## end for my $name ( sort keys...)
+  return;
+} ## end sub prebaked_list
+
+
+# Transform filenames using the provided expressions.
+sub transform_names {
+  my ($params)  = @_;
+  my $old_names = $params->{files};
+  my $new_names = [ map { transform_name( $params, $_ ) } @{$old_names} ];
+  check_hard_collisions( $old_names, $new_names ) if $params->{check_collisions};
+  ( $old_names, $new_names ) = dodge_soft_collisions( $old_names, $new_names );
+  return ( $old_names, $new_names );
+} ## end sub transform_names
+
+
+# Transform a filename using the provided expressions.
+# Handles basename, extension, and character encoding based on parameters.
+sub transform_name {
+  my ( $params, $name ) = @_;
+
+  # Split the filename into its components based on parameters
+  my ( $dir, $subj, $ext ) = ( q{}, $name, q{} );
+
+  # Handle basename - isolate directory if needed
+  if ( $params->{basename} ) {
+    ( $dir, $subj ) = $subj =~ m{ \A ( | .* / ) ( [^/]+ /? ) \z }msx
+      or die "Failed to isolate basename from '$name'\n";
+  }
+
+  # Handle extension - isolate extension if needed
+  if ( $params->{exclude_ext} ) {
+    ( $subj, $ext ) = $subj =~ m{ \A
+      ( .+? )
+      ( /? | \.[[:alnum:]]+ (?: \.[gx]z | \.p?bz2 | \.lz(?:|[4o]|ma) | \.zstd? )? /? )
+    \z }msx
+      or die "Failed to isolate extension from '$subj'\n";
+  } ## end if ( $params->{exclude_ext...})
+
+  # Decode, transform, and re-encode the filename
+  $subj = eval { $params->{from_charset}{codec}->decode($subj) }
+    or die "Failed to decode '$subj' from " . $params->{from_charset}{name} . ": $EVAL_ERROR\n";
+
+  # Apply each expression in sequence
+  foreach my $expr ( @{ $params->{exprs} } ) {
+    local $EVAL_ERROR = undef;
+    $subj = eval { $expr->{func}->($subj) }
+      or die 'Expression \'' . $expr->{expr} . '\' failed on \'' . $subj . '\': ' . $EVAL_ERROR . "\n";
+  }
+
+  # Re-encode to target charset
+  $subj = eval { $params->{to_charset}{codec}->encode($subj) }
+    or die "Failed to encode '$subj' to " . $params->{to_charset}{name} . ": $EVAL_ERROR\n";
+
+  return "$dir$subj$ext";
+} ## end sub transform_name
+
+
+# Check for hard collisions when renaming files.
+sub check_hard_collisions {
+  my ( $old_names, $new_names ) = @_;
+  my $die = 0;
+  my %map = ();
+  for my $i ( 0 .. scalar @{$new_names} - 1 ) {
+    my ( $old, $new ) = ( $old_names->[$i], $new_names->[$i] );
+    $map{$new} //= [];
+    push @{ $map{$new} }, $old;
+  }
+  for my $new ( sort keys %map ) {
+    next if scalar @{ $map{$new} } == 1;
+    my $old = $map{$new};
+    say {*STDERR} "Multiple files will be renamed to `$new':";
+    say {*STDERR} "  - `$_'" for @{$old};
+    $die = 1;
+  } ## end for my $new ( sort keys...)
+  die "Aborting due to collisions.\n" if $die;
+  return;
+} ## end sub check_hard_collisions
+
+
+# Avoid soft collisions when renaming file names.
+#
+# Note: $tmpfunc is received as an argument for ease of testing. During normal
+# operation, it should not be provided.
+sub dodge_soft_collisions {
+  my ( $old_names, $new_names, $tmpfunc ) = @_;
+  $tmpfunc //= sub {
+    my $tmp;
+    do {
+      my $rnd = join q{}, map { [ '0' .. '9', 'A' .. 'Z', 'a' .. 'z' ]->[ rand(62) ] } 1 .. 8;
+      $tmp = "@{[ dirname($_[0]) ]}/@{[ basename($_[0]) =~ s/^(.{,64}).*/$1/r ]}.$rnd.tmp";
+    } while ( -e $tmp );
+    return $tmp;
+  };
+  my %seen         = ();
+  my @appendix_old = ();
+  my @appendix_new = ();
+  for my $i ( 0 .. scalar @{$new_names} - 1 ) {
+    my ( $old, $new ) = ( $old_names->[$i], $new_names->[$i] );
+    next if $old eq $new;
+    $seen{$new} = $i;
+    next if not exists $seen{$old};
+    my $j   = $seen{$old};
+    my $tmp = $tmpfunc->($old);
+    $new_names->[$j] = $tmp;
+    push @appendix_old, $tmp;
+    push @appendix_new, $old;
+  } ## end for my $i ( 0 .. scalar...)
+  push @{$old_names}, @appendix_old;
+  push @{$new_names}, @appendix_new;
+  return ( $old_names, $new_names );
+} ## end sub dodge_soft_collisions
+
+
+# Create a directory and its parents as needed.
+# This is a recursive function similar to 'mkdir -p' in Unix.
+sub mkdirp {
+  my ($dir) = @_;
+  return if -d $dir;                                # Skip if directory already exists
+  return if $dir eq q{/};                           # Handle root path edge case
+  my $parent = dirname($dir);                       # Get parent directory
+  mkdirp($parent) if not -d $parent;                # Create parent directory if it doesn't exist
+  mkdir $dir or die "Can't create directory $dir: $OS_ERROR\n";
+  -d $dir    or die "Directory $dir doesn't exist after creation attempt\n";
+  return;
+} ## end sub mkdirp
+
+
+# Perform the actual file renaming operations.
+sub perform_renames {
+  my ( $params, $old_names, $new_names ) = @_;
+
+  # Define whether we need to show character set information
+  my $show_charset = $params->{from_charset}{name} ne $params->{to_charset}{name};
+
+  for my $i ( 0 .. scalar @{$old_names} - 1 ) {
+    my ( $old, $new ) = ( $old_names->[$i], $new_names->[$i] );
+    next if $old eq $new;
+
+    # Show progress information if verbosity allows
+    if ( $params->{verbosity} > 0 ) {
+      my $old_display = $params->{from_charset}{codec}->decode($old);
+      my $new_display = $params->{to_charset}{codec}->decode($new);
+
+      if ($show_charset) {
+        say "`$old_display' ($params->{from_charset}{name}) -> `$new_display' ($params->{to_charset}{name})";
+      } else {
+        say "`$old_display' -> `$new_display'";
+      }
+    } ## end if ( $params->{verbosity...})
+
+    if ( $params->{apply} ) {
+      # Create directory if needed
+      my $new_dir = dirname($new);
+      mkdirp($new_dir) if $params->{mkdirp} && $new_dir ne q{} && $new_dir ne q{.};
+
+      # Check if source exists (temp files may be created by previous renames in the batch)
+      unless ( -e $old ) {
+        # Allow temp files that don't exist yet (they'll be created by previous renames)
+        die "Source file `$old' does not exist.\n" unless $old =~ /\.tmp\z/sm;
+      }
+
+      # Check if target exists
+      if ( -e $new ) {
+        # Allow overwrite if explicitly requested, or if target is in our rename batch
+        # (soft collision)
+        die "Target file `$new' already exists.\n" unless $params->{overwrite};
+        unlink $new or die "Can't remove existing target `$new': $OS_ERROR\n";
+      } ## end if ( -e $new )
+
+      # Perform the rename
+      rename $old, $new or die "Can't rename `$old' to `$new': $OS_ERROR\n";
+    } ## end if ( $params->{apply} )
+  } ## end for my $i ( 0 .. scalar...)
+  return;
+} ## end sub perform_renames
+
+
+# Main entry point.
+sub main {
+  binmode STDOUT, ':encoding(utf-8)';
+  binmode STDERR, ':encoding(utf-8)';
+  my $params = params_get(@ARGV);
+  my ( $old_names, $new_names ) = transform_names($params);
+  perform_renames( $params, $old_names, $new_names );
+  return 0;
+} ## end sub main
+
+
+exit !main() unless caller;                         # Run main() if the script is executed directly.
+
+
+1;
