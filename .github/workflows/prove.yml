@@ -1,0 +1,26 @@
+name: Perl Tests
+
+on:
+  push:
+    branches: [ '*' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.36'  # Specify your preferred Perl version
+
+    - name: Install dependencies
+      run: |
+        cpanm --notest -n Test::More Test::Exception
+        cpanm --notest -n Getopt::Long::Parser Text::Unidecode
+
+    - name: Run tests with prove
+      run: prove ./rpl.t

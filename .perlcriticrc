@@ -1,0 +1,29 @@
+verbose = \n  \e[4m%f:%l\e[24m  \e[3m%p\e[23m  (Severity: %s)\n\n        \e[2m@%l:%c\e[22m  \e[1m%r\e[22m\n\n    > \e[1m%m\e[22m\n\n%d\n\n———————————————————————————————————————————————————————————————————————————————\n
+
+[-BuiltinFunctions::ProhibitComplexMappings]
+[-BuiltinFunctions::ProhibitUselessTopic]
+[-CodeLayout::ProhibitParensWithBuiltins]
+[-ControlStructures::ProhibitPostfixControls]
+[-ControlStructures::ProhibitUnlessBlocks]
+[-ControlStructures::ProhibitYadaOperator]
+[-ErrorHandling::RequireCarping]
+[-Modules::ProhibitAutomaticExportation]
+[-Modules::ProhibitMultiplePackages]
+[-Modules::RequireVersionVar]
+[-RegularExpressions::ProhibitComplexRegexes]
+[-RegularExpressions::ProhibitEscapedMetacharacters]
+[-RegularExpressions::ProhibitFixedStringMatches]
+[-RegularExpressions::RequireExtendedFormatting]
+[-ValuesAndExpressions::RequireInterpolationOfMetachars]
+[-ValuesAndExpressions::RequireUpperCaseHeredocTerminator]
+[-Variables::ProhibitPackageVars]
+[-ValuesAndExpressions::RequireConstantVersion]
+[-Subroutines::ProhibitSubroutinePrototypes]
+[-InputOutput::RequireCheckedClose]
+
+[InputOutput::RequireCheckedSyscalls]
+functions = :builtins
+exclude_functions = print say close binmode
+
+[ValuesAndExpressions::ProhibitMagicNumbers]
+allowed_values = -1 0 1 2 3 4 8 16 32 62 127 128 255 256 400
