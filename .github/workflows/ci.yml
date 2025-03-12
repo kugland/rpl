@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [ '*' ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Perl
+      uses: shogo82148/actions-setup-perl@v1
+      with:
+        perl-version: '5.40'
+
+    - name: Install dependencies
+      run: |
+        cpanm --notest -n \
+          Getopt::Long::Parser \
+          Test::Exception \
+          Test::More \
+          Text::Unidecode
+
+    - name: Run tests with prove
+      run: prove ./rpl.t
