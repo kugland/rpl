@@ -28,15 +28,14 @@ collision detection, and more.
 
 ### Generic
 
-```bash
+```console
 # 1. Clone or download the repository:
 git clone <repository-url>
 cd rpl
 # 2. Make the script executable:
-
 chmod +x rpl
-# 3. Install to your system (choose one):
 
+# 3. Install to your system (choose one):
 # System-wide installation
 sudo cp rpl /usr/local/bin/
 
@@ -61,7 +60,7 @@ sudo pacman -S perl-unicode-normalize perl-text-unidecode
 
 Build and install from the included PKGBUILD:
 
-```bash
+```console
 # Clone the repository
 git clone https://github.com/kugland/rpl.git
 cd rpl
@@ -143,55 +142,53 @@ Add to your `home.nix`:
 
 ## Usage
 
-```bash
-rpl [OPTIONS] [FILES...]
-```
+```rpl [OPTIONS] [FILES...]```
 
 ### Options
 
 *Expression Options*
 
-- `-e, --expr=EXPR`: Perl expression to apply (can be used multiple times).
-- `-s, --script=FILE`: Read Perl expressions from a file (`-` for stdin).
-- `-p, --prebaked=NAME`: Use a prebaked expression (see `--list-prebaked`).
+- `-e`, `--expr=EXPR`: Perl expression to apply (can be used multiple times).
+- `-s`, `--script=FILE`: Read Perl expressions from a file (`-` for stdin).
+- `-p`, `--prebaked=NAME`: Use a prebaked expression (see `--list-prebaked`).
 
 *File Input Options*
 
-- `-f, --from-file=FILE`: Read list of files to rename from FILE (`-` for
+- `-f`, `--from-file=FILE`: Read list of files to rename from FILE (`-` for
   stdin).
-- `-d, --delim=CHAR`: Set delimiter for `--from-file` (default: newline).
-- `-0, --null`: Use NUL as delimiter for `--from-file` (useful with
+- `-d`, `--delim=CHAR`: Set delimiter for `--from-file` (default: newline).
+- `-0`, `--null`: Use NUL as delimiter for `--from-file` (useful with
   `find -print0`)
 
 *Character Set Options*
-- `-c, --from-charset=ENC`: Decode filenames from charset (e.g., `latin1`,
+- `-c`, `--from-charset=ENC`: Decode filenames from charset (e.g., `latin1`,
   `utf-16le`)
-- `-t, --to-charset=ENC`: Encode filenames to charset (e.g., `latin1`,
+- `-t`, `--to-charset=ENC`: Encode filenames to charset (e.g., `latin1`,
   `utf-16le`).
 
 *Transformation Options*
 
-- `-b, --basename`: Transform only the basename (exclude directory part).
-- `-x, --exclude-ext`: Keep original file extension unchanged.
+- `-b`, `--basename`: Transform only the basename (exclude directory part).
+- `-x`, `--exclude-ext`: Keep original file extension unchanged.
 
 *Behavior Options*
 
-- `-a, --apply`: Actually perform renames (default is dry-run).
-- `-o, --overwrite`: Overwrite existing files.
-- `-C, --check-collisions`: Check for collisions (default: on).
-- `-m, --mkdirp`: Create directories as needed.
-- `-v, --verbose`: Be more verbose (can be used multiple times).
-- `-q, --quiet`: Be less verbose (can be used multiple times).
+- `-a`, `--apply`: Actually perform renames (default is dry-run).
+- `-o`, `--overwrite`: Overwrite existing files.
+- `-C`, `--check-collisions`: Check for collisions (default: on).
+- `-m`, `--mkdirp`: Create directories as needed.
+- `-v`, `--verbose`: Be more verbose (can be used multiple times).
+- `-q`, `--quiet`: Be less verbose (can be used multiple times).
 
 *Information Options*
 
-- `-h, --help`: Show help message.
-- `-V, --version`: Show version information.
-- `-l, --list-prebaked`: List available prebaked expressions.
+- `-h`, `--help`: Show help message.
+- `-V`, `--version`: Show version information.
+- `-l`, `--list-prebaked`: List available prebaked expressions.
 
 ## Examples
 
-```bash
+```console
 # Change `.txt` files to `.md` (dry-run by default):
 rpl -e 's/\.txt$/.md/' *.txt
 
@@ -232,18 +229,18 @@ Prebaked expressions provide quick access to common transformations. These
 are the available prebaked expressions (you can also list them by running
 `rpl --list-prebaked`):
 
-- **`collapse-blanks`**: Collapse consecutive blanks, trim leading/trailing
+- `collapse-blanks`: Collapse consecutive blanks, trim leading/trailing
   blanks.
-- **`normalize-nfc`**: Normalize Unicode to canonical composition (NFC).
-- **`normalize-nfd`**: Normalize Unicode to canonical decomposition (NFD).
-- **`normalize-nfkc`**: Normalize Unicode to compatibility composition (NFKC).
-- **`normalize-nfkd`**: Normalize Unicode to compatibility decomposition (NFKD).
-- **`strip-diacritics`**: Remove diacritics from names.
-- **`trim`**: Trim leading/trailing whitespace.
-- **`unidecode`**: Convert Unicode characters to ASCII using `Text::Unidecode`.
-- **`windows-fullwidth`**: Replace Windows-forbidden characters (`"`, `*`, `:`,
+- `normalize-nfc`: Normalize Unicode to canonical composition (NFC).
+- `normalize-nfd`: Normalize Unicode to canonical decomposition (NFD).
+- `normalize-nfkc`: Normalize Unicode to compatibility composition (NFKC).
+- `normalize-nfkd`: Normalize Unicode to compatibility decomposition (NFKD).
+- `strip-diacritics`: Remove diacritics from names.
+- `trim`: Trim leading/trailing whitespace.
+- `unidecode`: Convert Unicode characters to ASCII using `Text::Unidecode`.
+- `windows-fullwidth`: Replace Windows-forbidden characters (`"`, `*`, `:`,
   `<`, `>`, `?`, `\`, `|`) with [full-width](https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)) equivalents.
-- **`windows-fullwidth-rev`**: Reverse [full-width](https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)) replacements for
+- `windows-fullwidth-rev`: Reverse [full-width](https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)) replacements for
   Windows-forbidden characters
 
 > [!NOTE]
@@ -258,7 +255,7 @@ are the available prebaked expressions (you can also list them by running
 To use character set conversion, you can use `--from-charset=ENC` or `-c ENC`
 and `--to-charset=ENC` or `-t ENC`. The default charset is always `UTF-8`.
 
-```bash
+```console
 # Convert from latin1 to utf-8
 rpl -c latin1 -t utf-8 -a *
 
@@ -278,5 +275,5 @@ or pull requests.
 
 ## License
 
-This project is licensed under the MIT License. See the LICENSE file for
+This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for
 details.
