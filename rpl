@@ -107,7 +107,7 @@ sub params_get {
       s{ \n \z }{}msx;
       s{ \A . }{\L$&}msx;
       die "Error: $_.\nTry `rpl --help' for more information.\n";
-    };
+    }; ## end sub
     local $SIG{__WARN__} = sub { die $_[0] };
 
     $parser->getoptionsfromarray( \@argv,
@@ -262,6 +262,14 @@ my %PREBAKED_EXPRESSIONS = (
     'Reverse full-width replacements for chars forbidden in Windows',
     's{ [＂＊：＜＞？＼｜] }{ chr( ord( $& ) - 0xfee0 ) }egmsx',
   ],
+  'windows-fullwidth-with-slash' => [
+    'Full-width replacements for chars forbidden in Windows and Unix (incl. /)',
+    's{ ["*/:<>?\x5c|] }{ chr( ord( $& ) + 0xfee0 ) }egmsx',
+  ],
+  'windows-fullwidth-with-slash-rev' => [
+    'Reverse full-width replacements for chars forbidden in Windows and Unix (incl. /)',
+    's{ [＂＊／：＜＞？＼｜] }{ chr( ord( $& ) - 0xfee0 ) }egmsx',
+  ],
 );
 
 
@@ -378,7 +386,7 @@ sub dodge_soft_collisions {
       $tmp = "@{[ dirname($_[0]) ]}/@{[ basename($_[0]) =~ s/^(.{,64}).*/$1/r ]}.$rnd.tmp";
     } while ( -e $tmp );
     return $tmp;
-  };
+  }; ## end sub
   my %seen         = ();
   my @appendix_old = ();
   my @appendix_new = ();

@@ -95,7 +95,7 @@ subtest 'params_get' => sub {
     $p = params_get(qw{ --prebaked=collapse-blanks a });
     is scalar @{ $p->{exprs} },                 1,       '1 exprs from prebaked';
     is $p->{exprs}[0]{func}->("  a\t b \n c "), 'a b c', 'Prebaked expr works';
-  };
+  }; ## end 'Expression sources' => sub
   # File input handling
   subtest 'File sources' => sub {
     my $p = params_get(qw{ -e1 a b c });
@@ -108,7 +108,7 @@ subtest 'params_get' => sub {
     is_deeply $p->{files}, [qw{ file3.txt file4.jpg }], 'Files from stdin';
     $p = params_get(qw{ -e1 a b a b });
     is_deeply $p->{files}, [qw{ a b }], 'Unique files only';
-  };
+  }; ## end 'File sources' => sub
   # Character encoding
   subtest 'Character encoding' => sub {
     for my $dir (qw{ from to }) {
@@ -119,9 +119,9 @@ subtest 'params_get' => sub {
         my $counter = 0;
         $counter += $p->{"${dir}_charset"}{codec}->decode( chr $_ ) eq ( chr $_ ) for 0 .. 255;
         is $counter, 256, 'Codec is really latin1';
-      }
+      } ## end sub
     } ## end for my $dir (qw{ from to })
-  };
+  }; ## end 'Character encoding' => sub
   # Boolean options
   subtest 'Boolean flags' => sub {
     my @opts = ( qw{
@@ -141,9 +141,9 @@ subtest 'params_get' => sub {
         is $p->{$key}, 1, 'Long flag works';
         $p = params_get( qw{-e1 a}, $negate );
         is $p->{$key}, 0, 'Negated flag works';
-      }
+      } ## end sub
     } ## end for my ( $long, $short,...)
-  };
+  }; ## end 'Boolean flags' => sub
   # Error conditions
   subtest 'Error handling' => sub {
     ## no critic (RequireLineBoundaryMatching, RequireDotMatchAnything)
@@ -157,7 +157,7 @@ subtest 'params_get' => sub {
     throws_ok { params_get(qw{ -e BEGIN{die} a }) } qr/compilation failed/i,     'Script error';
     throws_ok { params_get(qw{ -dab -e1 -f/dev/null }) } qr/invalid delimiter/i, 'Invalid delim';
     ## use critic
-  };
+  }; ## end 'Error handling' => sub
   # Verbosity levels
   subtest 'Verbosity levels' => sub {
     subtest 'Default verbosity' => sub {
@@ -169,21 +169,21 @@ subtest 'params_get' => sub {
       is $p->{verbosity}, 2, 'Single -v increases verbosity';
       $p = params_get( '-e', 's/foo/bar/', '-v', '-v', 'a' );
       is $p->{verbosity}, 3, 'Multiple -v increases verbosity';
-    };
+    }; ## end 'Verbose flag' => sub
     subtest 'Quiet flag' => sub {
       my $p = params_get( '-e', 's/foo/bar/', '-q', 'a' );
       is $p->{verbosity}, 0, 'Single -q decreases verbosity';
       $p = params_get( '-e', 's/foo/bar/', '-q', '-q', 'a' );
       is $p->{verbosity}, 0, 'Verbosity clamped to 0';
-    };
+    }; ## end 'Quiet flag' => sub
     subtest 'Verbose and quiet together' => sub {
       my $p = params_get( '-e', 's/foo/bar/', '-v', '-q', 'a' );
       is $p->{verbosity}, 1, 'Verbose and quiet cancel';
       $p = params_get( '-e', 's/foo/bar/', '-v', '-v', '-q', 'a' );
       is $p->{verbosity}, 2, 'Multiple verbose and quiet (2v - 1q = 1, but starts at 1)';
-    };
-  };
-};
+    }; ## end 'Verbose and quiet together' => sub
+  }; ## end 'Verbosity levels' => sub
+}; ## end 'params_get' => sub
 
 
 subtest 'read_file' => sub {
@@ -218,12 +218,12 @@ subtest 'read_file' => sub {
     # When delimiter is undef, $INPUT_RECORD_SEPARATOR is undef, so whole file is read as one line
     is scalar @lines, 1, 'Reads whole file when delimiter undefined';
     like $lines[0], qr/line1.*line2/sm, 'File content preserved';
-  };
+  }; ## end 'Keeps empty lines when delimiter not set' => sub
   subtest 'Error handling' => sub {
     throws_ok { read_file( 'nonexistent-file', "\n" ) } qr/can't open file/ism, 'File not found';
     throws_ok { read_file( create_tempfile( ['test'] ), 'ab' ) } qr/invalid delimiter/ism, 'Invalid delimiter length';
   };
-};
+}; ## end 'read_file' => sub
 
 
 subtest 'compile_exprs' => sub {
@@ -232,13 +232,13 @@ subtest 'compile_exprs' => sub {
     is scalar @{$exprs},           1,            'One expression compiled';
     is $exprs->[0]{expr},          's/foo/bar/', 'Expression preserved';
     is $exprs->[0]{func}->('foo'), 'bar',        'Function works';
-  };
+  }; ## end 'Compiles single expression' => sub
   subtest 'Compiles multiple expressions' => sub {
     my $exprs = compile_exprs( 's/foo/bar/', 's/bar/baz/' );
     is scalar @{$exprs},           2,     'Two expressions compiled';
     is $exprs->[0]{func}->('foo'), 'bar', 'First function works';
     is $exprs->[1]{func}->('bar'), 'baz', 'Second function works';
-  };
+  }; ## end 'Compiles multiple expressions' => sub
   subtest 'Handles UTF-8 expressions' => sub {
     my $exprs = compile_exprs('s/foo/世界/');
     is $exprs->[0]{func}->('foo'), '世界', 'UTF-8 expression works';
@@ -246,7 +246,7 @@ subtest 'compile_exprs' => sub {
   subtest 'Error handling' => sub {
     throws_ok { compile_exprs('BEGIN{die "test"}') } qr/compilation failed/ism, 'Compilation error';
   };
-};
+}; ## end 'compile_exprs' => sub
 
 
 subtest 'prebaked_get' => sub {
@@ -258,7 +258,7 @@ subtest 'prebaked_get' => sub {
   subtest 'Error handling' => sub {
     throws_ok { prebaked_get('nonexistent') } qr/unknown prebaked expression/ism, 'Unknown expression';
   };
-};
+}; ## end 'prebaked_get' => sub
 
 
 subtest 'prebaked_list' => sub {
@@ -269,29 +269,31 @@ subtest 'prebaked_list' => sub {
   like $out, qr/trim/sm,                                              'Lists trim';
   like $out, qr/strip-diacritics/sm,                                  'Lists strip-diacritics';
   is $err, q{}, 'No stderr output';
-};
+}; ## end 'prebaked_list' => sub
 
 
 subtest 'prebaked exprs' => sub {
   ## no critic (ProhibitEscapedCharacters)
   my @CASES = (
-    [ 'collapse-blanks',       " a  \t\x{2003} \n b\tc ", 'a b c' ],
-    [ 'normalize-nfc',         "Ａa\x{0301}",              q{Ａá} ],
-    [ 'normalize-nfd',         q{Ａá},                     "Ａa\x{0301}" ],
-    [ 'normalize-nfkc',        "ＡＡ\x{0301}",              'AÁ' ],
-    [ 'normalize-nfkd',        'Ａá',                      "Aa\x{0301}" ],
-    [ 'strip-diacritics',      'áéíóúý',                  'aeiouy' ],
-    [ 'trim',                  "  \t\n  hello  \t\n  ",   'hello' ],
-    [ 'unidecode',             'Христос—αἰώνιον 道',       'Khristos--aionion Dao ' ],
-    [ 'windows-fullwidth',     '\\/:"<>|?*',              '＼/：＂＜＞｜？＊' ],
-    [ 'windows-fullwidth-rev', '＼/：＂＜＞｜？＊',               '\\/:"<>|?*' ],
+    [ 'collapse-blanks',                  " a  \t\x{2003} \n b\tc ", 'a b c' ],
+    [ 'normalize-nfc',                    "Ａa\x{0301}",              q{Ａá} ],
+    [ 'normalize-nfd',                    q{Ａá},                     "Ａa\x{0301}" ],
+    [ 'normalize-nfkc',                   "ＡＡ\x{0301}",              'AÁ' ],
+    [ 'normalize-nfkd',                   'Ａá',                      "Aa\x{0301}" ],
+    [ 'strip-diacritics',                 'áéíóúý',                  'aeiouy' ],
+    [ 'trim',                             "  \t\n  hello  \t\n  ",   'hello' ],
+    [ 'unidecode',                        'Христос—αἰώνιον 道',       'Khristos--aionion Dao ' ],
+    [ 'windows-fullwidth',                '\\/:"<>|?*',              '＼/：＂＜＞｜？＊' ],
+    [ 'windows-fullwidth-rev',            '＼/：＂＜＞｜？＊',               '\\/:"<>|?*' ],
+    [ 'windows-fullwidth-with-slash',     '\\/:"<>|?*',              '＼／：＂＜＞｜？＊' ],
+    [ 'windows-fullwidth-with-slash-rev', '＼／：＂＜＞｜？＊',               '\\/:"<>|?*' ],
   );
   for my $case (@CASES) {
     my ( $name, $input, $output ) = @{$case};
     my $p = params_get( "--prebaked=$name", 'a' );
     is $p->{exprs}[0]{func}->($input), $output, "$name works";
   }
-};
+}; ## end 'prebaked exprs' => sub
 
 
 subtest 'transform_names' => sub {
@@ -300,19 +302,19 @@ subtest 'transform_names' => sub {
     my ( $old, $new ) = transform_names($p);
     is_deeply $old, [qw{foo}], 'Old names preserved';
     is_deeply $new, [qw{bar}], 'New names transformed';
-  };
+  }; ## end 'Basic transformation' => sub
   subtest 'Multiple files' => sub {
     my $p = params_get( '-e', 's/foo/bar/', qw{foo1 foo2} );
     my ( $old, $new ) = transform_names($p);
     is_deeply $old, [qw{foo1 foo2}], 'Multiple old names';
     is_deeply $new, [qw{bar1 bar2}], 'Multiple new names';
-  };
+  }; ## end 'Multiple files' => sub
   subtest 'Check collisions enabled' => sub {
     my $p = params_get( '-e', 's/.*/same/', qw{file1 file2} );
     my ( $exit, $out, $err ) = capture_sub_output( sub { transform_names($p) } );
     is $exit, 255, 'Dies on collision';
     like $err, qr/Multiple files will be renamed/sm, 'Error message present';
-  };
+  }; ## end 'Check collisions enabled' => sub
   subtest 'Check collisions disabled' => sub {
     my $p = params_get( '-e', 's/.*/same/', '--no-check-collisions', qw{file1 file2} );
     my ( $old, $new ) = transform_names($p);
@@ -331,8 +333,8 @@ subtest 'transform_names' => sub {
     is $new->[1], 'A', 'Second file renamed to A';
     is $new->[2], 'B', 'Temp file renamed to B';
     ok $old->[2] =~ /\.tmp\z/sm, 'Temp file in old names';
-  };
-};
+  }; ## end 'Soft collision handling' => sub
+}; ## end 'transform_names' => sub
 
 
 subtest 'transform_name' => sub {
@@ -341,14 +343,14 @@ subtest 'transform_name' => sub {
     is transform_name( $p, 'foo.txt' ), 'BAR.TXT', 'Basic transformations';
     $p = params_get( '-e', '$_ = $_."1"', '-e', '$_ = $_."2"', 'a' );
     is transform_name( $p, 'start' ), 'start12', 'Expressions execute in order';
-  };
+  }; ## end 'Basic transformations' => sub
   subtest 'Filename components' => sub {
     subtest 'basename' => sub {
       my $p = params_get( '-e', 's/foo/bar/', '-e', '$_ = uc $_', '-b', 'a' );
       is transform_name( $p, '/path/foo.txt' ), '/path/BAR.TXT', 'Path untouched';
       is transform_name( $p, 'foo.txt' ),       'BAR.TXT',       'File with no path';
       is transform_name( $p, '/path/foo/' ),    '/path/BAR/',    'Slash at the end works';
-    };
+    }; ## end 'basename' => sub
     subtest 'exclude_ext' => sub {
       my $p = params_get( '-e', 's/foo/bar/', '-e', '$_ = uc $_', '-x', 'a' );
       is transform_name( $p, 'foo.txt' ),      'BAR.txt',      'Simple ext';
@@ -357,7 +359,7 @@ subtest 'transform_name' => sub {
       is transform_name( $p, 'foobar' ),       'BARBAR',       'No ext works fine';
       is transform_name( $p, '.foobar' ),      '.BARBAR',      'Dont mistake dotfile for ext';
       is transform_name( $p, '.tar.gz' ),      '.TAR.gz',      'Dont mistake dotfile for dbl ext';
-    };
+    }; ## end 'exclude_ext' => sub
     subtest 'basename + exclude_ext' => sub {
       my $p = params_get( '-e', 's/foo/bar/', '-e', '$_ = uc $_', '-b', '-x', 'a' );
       is transform_name( $p, '/path/foo.txt' ),      '/path/BAR.txt',      'Path and ext untouched';
@@ -368,8 +370,8 @@ subtest 'transform_name' => sub {
       is transform_name( $p, '/path/foobar' ),       '/path/BARBAR',       'No ext works fine';
       is transform_name( $p, '/path/.foobar' ), '/path/.BARBAR', 'Dont mistake dotfile for ext';
       is transform_name( $p, '/path/.tar.gz' ), '/path/.TAR.gz', 'Dont mistake dotfile for dbl ext';
-    };
-  };
+    }; ## end 'basename + exclude_ext' => sub
+  }; ## end 'Filename components' => sub
   subtest 'Character encoding' => sub {
     ## no critic (ProhibitEscapedCharacters)
     my ( $p, $latin1_str, $utf8_str ) = ( undef, "caf\xe9", "caf\xc3\xa9" );
@@ -378,8 +380,8 @@ subtest 'transform_name' => sub {
     is transform_name( $p, $latin1_str ), $utf8_str, 'Latin-1 to UTF-8 conversion';
     $p = params_get( '-e1', '--from-charset=utf-8', '--to-charset=latin1', 'a' );
     is transform_name( $p, $utf8_str ), $latin1_str, 'UTF-8 to Latin-1 conversion';
-  };
-};
+  }; ## end 'Character encoding' => sub
+}; ## end 'transform_name' => sub
 
 
 subtest 'check_hard_collisions' => sub {
@@ -428,9 +430,9 @@ subtest 'check_hard_collisions' => sub {
       is $exit, $should_die ? 255 : 0, 'Correct exit status';
       is $out,  q{},                   'Stdout empty';
       is $err,  $exp_err,              'Stderr matches';
-    };
+    }; ## end sub
   } ## end for my $case (@CASES)
-};
+}; ## end 'check_hard_collisions' => sub
 
 
 subtest 'dodge_soft_collisions' => sub {
@@ -446,7 +448,7 @@ subtest 'dodge_soft_collisions' => sub {
     my ( $old, $new ) = dodge_soft_collisions( $input_old, $input_new, $tmpfunc );
     is_deeply [ $old, $new ], [ $expected_old, $expected_new ], $case;
   }
-};
+}; ## end 'dodge_soft_collisions' => sub
 
 
 subtest 'mkdirp' => sub {
@@ -457,7 +459,7 @@ subtest 'mkdirp' => sub {
     ok !-e $dir, 'Directory does not exist initially';
     mkdirp($dir);
     ok -d $dir, 'Directory created successfully';
-  };
+  }; ## end 'Creates single directory' => sub
   # Test nested directory creation
   subtest 'Creates nested directories' => sub {
     my $temp = tempdir( CLEANUP => 1 );
@@ -465,7 +467,7 @@ subtest 'mkdirp' => sub {
     ok !-e $dir, 'Nested directory does not exist initially';
     mkdirp($dir);
     ok -d $dir, 'Deeply nested directory created';
-  };
+  }; ## end 'Creates nested directories' => sub
   # Test idempotency - existing directory
   subtest 'Handles existing directories' => sub {
     my $temp = tempdir( CLEANUP => 1 );
@@ -474,7 +476,7 @@ subtest 'mkdirp' => sub {
     ok -d $dir, 'Directory exists before test';
     lives_ok { mkdirp($dir) } 'No error when directory exists';
     ok -d $dir, 'Directory remains intact';
-  };
+  }; ## end 'Handles existing directories' => sub
   # Test partial existing structure
   subtest 'Completes partial structure' => sub {
     my $temp = tempdir( CLEANUP => 1 );
@@ -483,13 +485,13 @@ subtest 'mkdirp' => sub {
     ok !-e $dir, 'Full path does not exist initially';
     mkdirp($dir);
     ok -d $dir, 'Creates missing child directories';
-  };
+  }; ## end 'Completes partial structure' => sub
   subtest 'Fails if a file exists on the path' => sub {
     my $temp = tempdir( CLEANUP => 1 );
     create_file("$temp/file.txt");
     throws_ok { mkdirp("$temp/file.txt") } qr/file exists/msi, 'Fails if a file exists';
   };
-};
+}; ## end 'mkdirp' => sub
 
 
 subtest 'main function' => sub {
@@ -517,7 +519,7 @@ subtest 'main function' => sub {
     );
     is $exit, 0, 'Dry run exits successfully';
     like $out, qr/`foo\.txt' -> `bar\.txt'/sm, 'Transformation shown';
-  };
+  }; ## end 'Dry run output' => sub
   subtest 'Quiet mode' => sub {
     my ( $exit, $out, $err ) = capture_sub_output(
       sub {
@@ -527,7 +529,7 @@ subtest 'main function' => sub {
     );
     is $exit, 0,   'Quiet mode exits successfully';
     is $out,  q{}, 'No output in quiet mode';
-  };
+  }; ## end 'Quiet mode' => sub
   subtest 'No changes output' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
     my $old_file = create_file( "$temp/foo.txt", 'test content' );
@@ -543,7 +545,7 @@ subtest 'main function' => sub {
     ok !-e $new_file, 'Target file does not exist';
     is $exit, 0,   'No changes exits successfully';
     is $out,  q{}, 'No output when no changes';
-  };
+  }; ## end 'No changes output' => sub
   subtest 'Basic rename with apply' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
     my $old_file = create_file( "$temp/foo.txt", 'test content' );
@@ -562,7 +564,7 @@ subtest 'main function' => sub {
     ok !-e $old_file, 'Source file renamed away';
     ok -e $new_file,  'Target file exists after rename';
     assert_file_content( $new_file, 'test content' );
-  };
+  }; ## end 'Basic rename with apply' => sub
   subtest 'Multiple files with apply' => sub {
     my $temp      = tempdir( CLEANUP => 1 );
     my @old_files = ( "$temp/file1.txt", "$temp/file2.txt", "$temp/file3.txt" );
@@ -580,7 +582,7 @@ subtest 'main function' => sub {
       ok !-e $old_files[$_], "Source file $old_files[$_] renamed away";
       assert_file_content( $new_files[$_], "content for $old_files[$_]" );
     }
-  };
+  }; ## end 'Multiple files with apply' => sub
   subtest 'Apply with mkdirp' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
     my $old_file = create_file("$temp/source.txt");
@@ -597,7 +599,7 @@ subtest 'main function' => sub {
     ok -d "$temp/newdir/subdir", 'Subdirectory created';
     ok -e $new_file,             'File renamed to new directory';
     ok !-e $old_file,            'Source file renamed away';
-  };
+  }; ## end 'Apply with mkdirp' => sub
   subtest 'Apply with overwrite' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
     my $old_file = create_file( "$temp/old.txt", 'old content' );
@@ -613,7 +615,7 @@ subtest 'main function' => sub {
     ok -e $new_file,  'Target file still exists';
     ok !-e $old_file, 'Source file renamed away';
     assert_file_content( $new_file, 'old content' );
-  };
+  }; ## end 'Apply with overwrite' => sub
   subtest 'Error: source does not exist' => sub {
     my $temp = tempdir( CLEANUP => 1 );
     my ( $exit, $out, $err ) = capture_sub_output(
@@ -625,7 +627,7 @@ subtest 'main function' => sub {
     );
     is $exit, 255, 'Exits with error when source does not exist';
     like $err, qr/Source file.*does not exist/sm, 'Error message present';
-  };
+  }; ## end 'Error: source does not exist' => sub
   subtest 'Error: target exists without overwrite' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
     my $old_file = create_file("$temp/old.txt");
@@ -641,7 +643,7 @@ subtest 'main function' => sub {
     like $err, qr/Target file.*already exists/sm, 'Error message present';
     ok -e $old_file, 'Source file not renamed';
     ok -e $new_file, 'Target file still exists';
-  };
+  }; ## end 'Error: target exists without overwrite' => sub
   subtest 'Apply with soft collision handling' => sub {
     my $temp   = tempdir( CLEANUP => 1 );
     my $file_a = create_file( "$temp/A", 'content A' );
@@ -656,7 +658,7 @@ subtest 'main function' => sub {
     is $exit, 0, 'Swap rename exits successfully';
     assert_file_content( $file_b, 'content A' );
     assert_file_content( $file_a, 'content B' );
-  };
+  }; ## end 'Apply with soft collision handling' => sub
   subtest 'Charset conversion latin1 -> utf-8' => sub {
     my $utf8   = Encode::find_encoding('utf-8');
     my $latin1 = Encode::find_encoding('latin1');
@@ -678,7 +680,7 @@ subtest 'main function' => sub {
     ok !-e $old_file_bytes, 'Source file renamed away';
     assert_file_content( 'café.txt', 'test content' );
     chdir $cwd or die;
-  };
+  }; ## end 'Charset conversion latin1 -> utf-8' => sub
   subtest 'Charset conversion utf-8 -> latin1' => sub {
     my $utf8   = Encode::find_encoding('utf-8');
     my $latin1 = Encode::find_encoding('latin1');
@@ -698,7 +700,7 @@ subtest 'main function' => sub {
     ok !-e $old_file, 'Source file renamed away';
     assert_file_content( $new_file, 'test content' );
     chdir $cwd or die;
-  };
+  }; ## end 'Charset conversion utf-8 -> latin1' => sub
   subtest 'Script from file' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
     my $old_file = create_file( "$temp/FOO.txt", 'test content' );
@@ -715,7 +717,7 @@ subtest 'main function' => sub {
     ok !-e $old_file, 'Source file renamed away';
     ok -e $new_file,  'Target file exists after rename';
     assert_file_content( $new_file, 'test content' );
-  };
+  }; ## end 'Script from file' => sub
   subtest 'Script from stdin' => sub {
     my $temp           = tempdir( CLEANUP => 1 );
     my $old_file       = create_file( "$temp/FOO.txt", 'test content' );
@@ -727,11 +729,11 @@ subtest 'main function' => sub {
         open STDIN, '<', create_tempfile( [$script_content] );
         local @ARGV = ( '-s-', 'FOO.txt' );
         main();
-      }
+      } ## end sub
     );
     is $exit, 0, 'Script from stdin exits successfully';
     like $out, qr/`FOO\.txt' -> `bar\.txt'/sm, 'Transformation shown';
-  };
+  }; ## end 'Script from stdin' => sub
   subtest 'From-file' => sub {
     my $temp      = tempdir( CLEANUP => 1 );
     my @old_files = ( "$temp/file1.txt", "$temp/file2.txt" );
@@ -750,7 +752,7 @@ subtest 'main function' => sub {
       ok !-e $old_files[$_], "Source file $old_files[$_] renamed away";
       assert_file_content( $new_files[$_], "content for $old_files[$_]" );
     }
-  };
+  }; ## end 'From-file' => sub
   subtest 'From-file from stdin' => sub {
     my $temp      = tempdir( CLEANUP => 1 );
     my @old_files = ( "$temp/file1.txt", "$temp/file2.txt" );
@@ -762,12 +764,12 @@ subtest 'main function' => sub {
         open STDIN, '<', create_tempfile( [qw{file1.txt file2.txt}] );
         local @ARGV = ( '-es/file/doc/', '-f-' );
         main();
-      }
+      } ## end sub
     );
     is $exit, 0, 'From-file from stdin exits successfully';
     like $out, qr/`file1\.txt' -> `doc1\.txt'/sm, 'First transformation shown';
     like $out, qr/`file2\.txt' -> `doc2\.txt'/sm, 'Second transformation shown';
-  };
+  }; ## end 'From-file from stdin' => sub
   subtest 'From-file with custom delimiter' => sub {
     my $temp      = tempdir( CLEANUP => 1 );
     my @old_files = ( "$temp/file1.txt", "$temp/file2.txt" );
@@ -786,7 +788,7 @@ subtest 'main function' => sub {
       ok !-e $old_files[$_], "Source file $old_files[$_] renamed away";
       assert_file_content( $new_files[$_], "content for $old_files[$_]" );
     }
-  };
+  }; ## end 'From-file with custom delimiter' => sub
   subtest 'From-file with null delimiter' => sub {
     my $temp      = tempdir( CLEANUP => 1 );
     my @old_files = ( "$temp/file1.txt", "$temp/file2.txt" );
@@ -805,7 +807,7 @@ subtest 'main function' => sub {
       ok !-e $old_files[$_], "Source file $old_files[$_] renamed away";
       assert_file_content( $new_files[$_], "content for $old_files[$_]" );
     }
-  };
+  }; ## end 'From-file with null delimiter' => sub
   subtest 'From-file with null delimiter from stdin' => sub {
     my $temp      = tempdir( CLEANUP => 1 );
     my @old_files = ( "$temp/file1.txt", "$temp/file2.txt" );
@@ -817,13 +819,13 @@ subtest 'main function' => sub {
         open STDIN, '<', create_tempfile( [qw{file1.txt file2.txt}], "\0" );
         local @ARGV = ( '-es/file/doc/', '--null', '-f-' );
         main();
-      }
+      } ## end sub
     );
     is $exit, 0, 'From-file with null delimiter from stdin exits successfully';
     like $out, qr/`file1\.txt' -> `doc1\.txt'/sm, 'First transformation shown';
     like $out, qr/`file2\.txt' -> `doc2\.txt'/sm, 'Second transformation shown';
-  };
-};
+  }; ## end 'From-file with null delimiter from stdin' => sub
+}; ## end 'main function' => sub
 
 
 done_testing;
