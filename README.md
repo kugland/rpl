@@ -64,7 +64,7 @@ cd rpl
 makepkg -si
 
 # Then install the built package
-sudo pacman -U rpl-3.1.0-1-any.pkg.tar.zst
+sudo pacman -U rpl-3.2.0-1-any.pkg.tar.zst
 ```
 
 ### Nix with Flakes

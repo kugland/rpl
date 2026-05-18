@@ -32,7 +32,7 @@ use List::Util           qw{ max };
 use File::Basename       qw{ basename dirname };
 
 use version 0.77 ();
-our $VERSION = version->declare('v3.1.0');
+our $VERSION = version->declare('v3.2.0');
 
 my $help_message = <<~";;";
   rpl @{[ $VERSION->stringify() ]} - Rename files using Perl expressions

@@ -21,7 +21,7 @@
 in
   stdenv.mkDerivation {
     pname = "rpl";
-    version = "3.1.0";
+    version = "3.2.0";
     src = lib.cleanSourceWith {
       src = ./.;
       filter = path: type: let
