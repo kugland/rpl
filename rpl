@@ -276,6 +276,7 @@ sub prebaked_get {
 
 # List all available prebaked expressions.
 sub prebaked_list {
+  binmode STDOUT, ':encoding(utf-8)';
   say q{The following prebaked expressions are available:};
   say q{};
   my $colwidth = max map { length $_ } keys %PREBAKED_EXPRESSIONS;
@@ -440,10 +441,9 @@ sub perform_renames {
       my $new_dir = dirname($new);
       mkdirp($new_dir) if $params->{mkdirp} && $new_dir ne q{} && $new_dir ne q{.};
 
-      # Check if source exists (temp files may be created by previous renames in the batch)
+      # Check if source exists
       unless ( -e $old ) {
-        # Allow temp files that don't exist yet (they'll be created by previous renames)
-        die "Source file `$old' does not exist.\n" unless $old =~ /\.tmp\z/sm;
+        die "Source file `$old' does not exist.\n";
       }
 
       # Check if target exists
