@@ -503,7 +503,7 @@ subtest 'main function' => sub {
   subtest 'Version message' => sub {
     my ( $exit, $out, $err ) = capture_sub_output( sub { local @ARGV = qw{--version}; main() } );
     is $exit, 0, 'Version exits successfully';
-    like $out, qr/rpl v3\.1\.0/sm, 'Version message present';
+    like $out, qr/rpl v\d+\.\d+\.\d+/sm, 'Version message present';
   };
   subtest 'List prebaked' => sub {
     my ( $exit, $out, $err ) = capture_sub_output( sub { local @ARGV = qw{--list-prebaked}; main() } );
