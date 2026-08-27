@@ -244,7 +244,11 @@ are the available prebaked expressions (you can also list them by running
 - `windows-fullwidth`: Replace Windows-forbidden characters (`"`, `*`, `:`,
   `<`, `>`, `?`, `\`, `|`) with [full-width](https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)) equivalents.
 - `windows-fullwidth-rev`: Reverse [full-width](https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)) replacements for
-  Windows-forbidden characters
+  Windows-forbidden characters.
+- `windows-fullwidth-with-slash`: Like `windows-fullwidth`, but also replaces
+  the Unix-forbidden `/` with its [full-width](https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)) equivalent.
+- `windows-fullwidth-with-slash-rev`: Reverse [full-width](https://en.wikipedia.org/wiki/Halfwidth_and_Fullwidth_Forms_(Unicode_block)) replacements for
+  Windows- and Unix-forbidden characters (incl. `/`).
 
 > [!NOTE]
 > Prebaked expressions are applied in the order they are given, and can be
