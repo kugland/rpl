@@ -98,6 +98,10 @@ sub params_get {
   };
   my $delim = "\n";
 
+  # This block scopes the localized $SIG handlers below to argument parsing and
+  # input validation, so every user-facing error raised here is reformatted
+  # uniformly (with the `Try `rpl --help'' hint) and the handlers are restored
+  # before the expressions are compiled.
   do {
     my $parser = Getopt::Long::Parser->new();
     $parser->configure(qw{ no_ignore_case bundling no_auto_abbrev });
@@ -146,7 +150,7 @@ sub params_get {
     for my $opt (qw{ from_charset to_charset }) {
       # Load the charset codec.
       my $name  = $params->{$opt}              // 'utf-8';
-      my $codec = Encode::find_encoding($name) // do die "unknown charset: `$name'\n";
+      my $codec = Encode::find_encoding($name) // die "unknown charset: `$name'\n";
       $params->{$opt} = { name => $name, codec => $codec };
     } ## end for my $opt (qw{ from_charset to_charset })
 
@@ -304,9 +308,18 @@ sub transform_names {
   my $old_names = $params->{files};
   my $new_names = [ map { transform_name( $params, $_ ) } @{$old_names} ];
   check_hard_collisions( $old_names, $new_names ) if $params->{check_collisions};
-  ( $old_names, $new_names ) = dodge_soft_collisions( $old_names, $new_names );
-  return ( $old_names, $new_names );
+  return dodge_soft_collisions( $old_names, $new_names );
 } ## end sub transform_names
+
+
+# Run a step that may throw, dying with a contextual message on failure.
+# The block performs its side effect (e.g. assigns to a captured variable);
+# its return value is ignored, so falsy results are not mistaken for errors.
+sub try_step {
+  my ( $code, $errmsg ) = @_;
+  eval { $code->(); 1 } or die "$errmsg: $EVAL_ERROR\n";
+  return;
+}
 
 
 # Transform a filename using the provided expressions.
@@ -332,20 +345,19 @@ sub transform_name {
       or die "Failed to isolate extension from '$subj'\n";
   } ## end if ( $params->{exclude_ext...})
 
-  # Decode, transform, and re-encode the filename
-  eval { $subj = $params->{from_charset}{codec}->decode($subj); 1 }
-    or die "Failed to decode '$subj' from " . $params->{from_charset}{name} . ": $EVAL_ERROR\n";
+  # Decode, transform, and re-encode the filename.
+  try_step( sub { $subj = $params->{from_charset}{codec}->decode($subj) },
+    "Failed to decode '$subj' from $params->{from_charset}{name}" );
 
-  # Apply each expression in sequence
+  # Apply each expression in sequence.
   foreach my $expr ( @{ $params->{exprs} } ) {
-    local $EVAL_ERROR = undef;
-    eval { $subj = $expr->{func}->($subj); 1 }
-      or die 'Expression \'' . $expr->{expr} . '\' failed on \'' . $subj . '\': ' . $EVAL_ERROR . "\n";
+    try_step( sub { $subj = $expr->{func}->($subj) },
+      "Expression '$expr->{expr}' failed on '$subj'" );
   }
 
-  # Re-encode to target charset
-  eval { $subj = $params->{to_charset}{codec}->encode($subj); 1 }
-    or die "Failed to encode '$subj' to " . $params->{to_charset}{name} . ": $EVAL_ERROR\n";
+  # Re-encode to target charset.
+  try_step( sub { $subj = $params->{to_charset}{codec}->encode($subj) },
+    "Failed to encode '$subj' to $params->{to_charset}{name}" );
 
   return "$dir$subj$ext";
 } ## end sub transform_name
@@ -375,6 +387,9 @@ sub check_hard_collisions {
 
 # Avoid soft collisions when renaming file names.
 #
+# Returns fresh (old, new) lists plus a set of the temp names it introduced, so
+# the caller can render those consistently. Does not mutate its arguments.
+#
 # Note: $tmpfunc is received as an argument for ease of testing. During normal
 # operation, it should not be provided.
 sub dodge_soft_collisions {
@@ -383,27 +398,31 @@ sub dodge_soft_collisions {
     my $tmp;
     do {
       my $rnd = join q{}, map { [ '0' .. '9', 'A' .. 'Z', 'a' .. 'z' ]->[ rand(62) ] } 1 .. 8;
-      $tmp = "@{[ dirname($_[0]) ]}/@{[ basename($_[0]) =~ s/^(.{,64}).*/$1/r ]}.$rnd.tmp";
+      $tmp = "@{[ dirname($_[0]) ]}/@{[ basename($_[0]) =~ s/^(.{0,64}).*/$1/r ]}.$rnd.tmp";
     } while ( -e $tmp );
     return $tmp;
   }; ## end sub
+  my @old          = @{$old_names};                 # Copies: leave the caller's lists untouched.
+  my @new          = @{$new_names};
   my %seen         = ();
+  my %is_temp      = ();                            # Temp names we introduce (for display decoding).
   my @appendix_old = ();
   my @appendix_new = ();
-  for my $i ( 0 .. scalar @{$new_names} - 1 ) {
-    my ( $old, $new ) = ( $old_names->[$i], $new_names->[$i] );
+  for my $i ( 0 .. $#new ) {
+    my ( $old, $new ) = ( $old[$i], $new[$i] );
     next if $old eq $new;
     $seen{$new} = $i;
     next if not exists $seen{$old};
     my $j   = $seen{$old};
     my $tmp = $tmpfunc->($old);
-    $new_names->[$j] = $tmp;
+    $new[$j] = $tmp;
+    $is_temp{$tmp} = 1;
     push @appendix_old, $tmp;
     push @appendix_new, $old;
-  } ## end for my $i ( 0 .. scalar...)
-  push @{$old_names}, @appendix_old;
-  push @{$new_names}, @appendix_new;
-  return ( $old_names, $new_names );
+  } ## end for my $i ( 0 .. $#new )
+  push @old, @appendix_old;
+  push @new, @appendix_new;
+  return ( \@old, \@new, \%is_temp );
 } ## end sub dodge_soft_collisions
 
 
@@ -423,7 +442,7 @@ sub mkdirp {
 
 # Perform the actual file renaming operations.
 sub perform_renames {
-  my ( $params, $old_names, $new_names ) = @_;
+  my ( $params, $old_names, $new_names, $temp_names ) = @_;
 
   # Define whether we need to show character set information
   my $show_charset = $params->{from_charset}{name} ne $params->{to_charset}{name};
@@ -434,8 +453,14 @@ sub perform_renames {
 
     # Show progress information if verbosity allows
     if ( $params->{verbosity} > 0 ) {
+      # Temp names we introduced are byte-derived from the source (from-charset)
+      # names, so decode them with from-charset even though they occupy a target
+      # slot; otherwise a charset conversion would mis-render them.
+      my $new_charset = ( $temp_names && $temp_names->{$new} )
+        ? $params->{from_charset}
+        : $params->{to_charset};
       my $old_display = $params->{from_charset}{codec}->decode($old);
-      my $new_display = $params->{to_charset}{codec}->decode($new);
+      my $new_display = $new_charset->{codec}->decode($new);
 
       if ($show_charset) {
         say "`$old_display' ($params->{from_charset}{name}) -> `$new_display' ($params->{to_charset}{name})";
@@ -458,7 +483,7 @@ sub perform_renames {
       if ( -e $new ) {
         die "Target file `$new' already exists.\n" unless $params->{overwrite};
         unlink $new or die "Can't remove existing target `$new': $OS_ERROR\n";
-      } ## end if ( -e $new )
+      }
 
       # Perform the rename
       rename $old, $new or die "Can't rename `$old' to `$new': $OS_ERROR\n";
@@ -473,8 +498,8 @@ sub main {
   binmode STDOUT, ':encoding(utf-8)';
   binmode STDERR, ':encoding(utf-8)';
   my $params = params_get(@ARGV);
-  my ( $old_names, $new_names ) = transform_names($params);
-  perform_renames( $params, $old_names, $new_names );
+  my ( $old_names, $new_names, $temp_names ) = transform_names($params);
+  perform_renames( $params, $old_names, $new_names, $temp_names );
   return 0;
 } ## end sub main
 
