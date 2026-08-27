@@ -456,8 +456,6 @@ sub perform_renames {
 
       # Check if target exists
       if ( -e $new ) {
-        # Allow overwrite if explicitly requested, or if target is in our rename batch
-        # (soft collision)
         die "Target file `$new' already exists.\n" unless $params->{overwrite};
         unlink $new or die "Can't remove existing target `$new': $OS_ERROR\n";
       } ## end if ( -e $new )
