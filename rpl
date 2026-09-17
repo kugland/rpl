@@ -79,6 +79,20 @@ my $help_message = <<~";;";
   ;;
 
 
+# Render a die message as a user-facing error line. Strips Perl's
+# ` at FILE line N.' suffix, which a die without a trailing newline picks up and
+# which would otherwise leak the installed script path into ordinary output.
+sub format_error {
+  my ($msg) = @_;
+  $msg =~ s{ \s+ \z }{}msx;
+  $msg =~ s{ \s+ at \s+ \S+ \s+ line \s+ \d+ [.] \z }{}msx;
+  $msg =~ s{ \s+ \z }{}msx;
+  $msg =~ s{ \A . }{\L$&}msx;
+  my $stop = $msg =~ m{ [.!?] \z }msx ? q{} : q{.}; # Don't double an existing full stop.
+  return "Error: $msg$stop\n";
+} ## end sub format_error
+
+
 # Parse cli args and return a hashref of options.
 sub params_get {
   my (@argv) = @_;
@@ -107,11 +121,8 @@ sub params_get {
     $parser->configure(qw{ no_ignore_case bundling no_auto_abbrev });
 
     local $SIG{__DIE__} = sub {
-      local $_ = $_[0];
-      s{ \n \z }{}msx;
-      s{ \A . }{\L$&}msx;
-      die "Error: $_.\nTry `rpl --help' for more information.\n";
-    }; ## end sub
+      die format_error( $_[0] ) . "Try `rpl --help' for more information.\n";
+    };
     local $SIG{__WARN__} = sub { die $_[0] };
 
     $parser->getoptionsfromarray( \@argv,
@@ -280,7 +291,7 @@ my %PREBAKED_EXPRESSIONS = (
 # Get the expression with the given name.
 sub prebaked_get {
   my ($name) = @_;
-  die "Unknown prebaked expression: $name" unless exists $PREBAKED_EXPRESSIONS{$name};
+  die "Unknown prebaked expression: $name\n" unless exists $PREBAKED_EXPRESSIONS{$name};
   my ( $desc, @exprs ) = @{ $PREBAKED_EXPRESSIONS{$name} };
   return join q{; }, @exprs;
 } ## end sub prebaked_get
@@ -317,9 +328,13 @@ sub transform_names {
 # its return value is ignored, so falsy results are not mistaken for errors.
 sub try_step {
   my ( $code, $errmsg ) = @_;
-  eval { $code->(); 1 } or die "$errmsg: $EVAL_ERROR\n";
+  my $ok = do {
+    local $SIG{__DIE__} = 'DEFAULT';                # Wrap the raw failure, not a rendered one.
+    eval { $code->(); 1 }; ## no critic (RequireCheckingReturnValueOfEval)
+  };
+  $ok or die "$errmsg: $EVAL_ERROR";
   return;
-}
+} ## end sub try_step
 
 
 # Transform a filename using the provided expressions.
@@ -497,6 +512,12 @@ sub perform_renames {
 sub main {
   binmode STDOUT, ':encoding(utf-8)';
   binmode STDERR, ':encoding(utf-8)';
+
+  # Render every failure uniformly. Usage errors raised during argument parsing
+  # install their own handler, which additionally points at `--help'; the hint
+  # would only mislead for the runtime failures caught here.
+  local $SIG{__DIE__} = sub { die format_error( $_[0] ) };
+
   my $params = params_get(@ARGV);
   my ( $old_names, $new_names, $temp_names ) = transform_names($params);
   perform_renames( $params, $old_names, $new_names, $temp_names );

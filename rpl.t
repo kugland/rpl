@@ -626,7 +626,7 @@ subtest 'main function' => sub {
       }
     );
     is $exit, 255, 'Exits with error when source does not exist';
-    like $err, qr/Source file.*does not exist/sm, 'Error message present';
+    is $err,  "Error: source file `foo.txt' does not exist.\n", 'Error message present';
   }; ## end 'Error: source does not exist' => sub
   subtest 'Error: target exists without overwrite' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
@@ -640,7 +640,7 @@ subtest 'main function' => sub {
       }
     );
     is $exit, 255, 'Exits with error when target exists';
-    like $err, qr/Target file.*already exists/sm, 'Error message present';
+    is $err,  "Error: target file `new.txt' already exists.\n", 'Error message present';
     ok -e $old_file, 'Source file not renamed';
     ok -e $new_file, 'Target file still exists';
   }; ## end 'Error: target exists without overwrite' => sub
@@ -826,6 +826,52 @@ subtest 'main function' => sub {
     like $out, qr/`file2\.txt' -> `doc2\.txt'/sm, 'Second transformation shown';
   }; ## end 'From-file with null delimiter from stdin' => sub
 }; ## end 'main function' => sub
+
+
+# Exact-match assertions on rendered stderr. The rest of the suite uses loose
+# `like' matches, which pass regardless of trailing junk (a leaked script path,
+# a stray blank line), so the formatting contract needs pinning down here.
+subtest 'error message formatting' => sub {
+  subtest 'Usage error is prefixed and hinted, without a leaked script path' => sub {
+    my ( $exit, $out, $err ) = capture_sub_output(
+      sub {
+        local @ARGV = qw{ -p nonexistent a };
+        main();
+      }
+    );
+    is $err, <<~';;', 'Usage error rendered without Perl location suffix';
+      Error: unknown prebaked expression: nonexistent.
+      Try `rpl --help' for more information.
+      ;;
+  }; ## end 'Usage error is prefixed and hinted, without a leaked script path' => sub
+
+  subtest 'Runtime expression failure is prefixed, without a trailing blank line' => sub {
+    my ( $exit, $out, $err ) = capture_sub_output(
+      sub {
+        local @ARGV = ( '-e', 'die "boom\n"', 'foo.txt' );
+        main();
+      }
+    );
+    is $err, <<~';;', 'Runtime error prefixed and not double-spaced';
+      Error: expression 'die "boom\n"' failed on 'foo.txt': boom.
+      ;;
+  }; ## end 'Runtime expression failure is prefixed, without a trailing blank line' => sub
+
+  subtest 'Collision abort is prefixed but not hinted' => sub {
+    my ( $exit, $out, $err ) = capture_sub_output(
+      sub {
+        local @ARGV = ( '-e', 's/.*/same.txt/', 'x1.txt', 'x2.txt' );
+        main();
+      }
+    );
+    is $err, <<~';;', 'Collision abort carries no --help hint';
+      Multiple files will be renamed to `same.txt':
+        - `x1.txt'
+        - `x2.txt'
+      Error: aborting due to collisions.
+      ;;
+  }; ## end 'Collision abort is prefixed but not hinted' => sub
+}; ## end 'error message formatting' => sub
 
 
 done_testing;
