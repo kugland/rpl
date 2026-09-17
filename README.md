@@ -13,6 +13,8 @@ collision detection, and more.
   transformations.
 - **Prebaked Expressions**: Quick access to common transformations (Unicode
   normalization, diacritic removal, whitespace trimming, &c).
+- **Utility Functions**: Opt-in helper functions callable from your expressions
+  (see `--list-utils`).
 - **Character Set Conversion**: Convert filenames between different character
   encodings (e.g., latin1, utf-16le, utf-8).
 - **Collision Detection**: Automatically detects and handles filename
@@ -154,6 +156,8 @@ Add to your `home.nix`:
 - `-e`, `--expr=EXPR`: Perl expression to apply (can be used multiple times).
 - `-s`, `--script=FILE`: Read Perl expressions from a file (`-` for stdin).
 - `-p`, `--prebaked=NAME`: Use a prebaked expression (see `--list-prebaked`).
+- `-u`, `--util=NAME[,...]`: Make a utility function visible to the expressions
+  (can be used multiple times; see `--list-utils`).
 
 *File Input Options*
 
@@ -188,6 +192,7 @@ Add to your `home.nix`:
 - `-h`, `--help`: Show help message.
 - `-V`, `--version`: Show version information.
 - `-l`, `--list-prebaked`: List available prebaked expressions.
+- `--list-utils`: List available utility functions.
 
 ### Examples
 
@@ -255,6 +260,47 @@ are the available prebaked expressions (you can also list them by running
 > combined with other expressions or character set conversions. In fact,
 > a prebaked expression is just a shortcut for a specific expression or
 > set of expressions.
+
+### Utility Functions
+
+Utility functions are helpers you can call from your expressions. Unlike
+prebaked expressions, they are not transformations in themselves — they are
+building blocks for your own. Each one must be requested explicitly with
+`--util` / `-u`, and only the ones you request are made visible to the
+expressions; the rest never enter the namespace.
+
+These are the available utility functions (you can also list them by running
+`rpl --list-utils`):
+
+- `to_roman_numeral($n)`: Convert an integer between 1 and 3999 to a Roman
+  numeral.
+
+```console
+# Turn chapter numbers into Roman numerals:
+rpl -u to_roman_numeral -e 's/(\d+)/to_roman_numeral($1)/e' *.txt
+# `chapter 19.txt' -> `chapter XIX.txt'
+
+# Several functions at once (repeat -u, or separate names with commas):
+rpl -u to_roman_numeral,other_function -e '...' *
+```
+
+> [!NOTE]
+> Note the `/e` flag on the substitution above: without it, Perl treats the
+> replacement as a literal string rather than code to evaluate.
+
+> [!NOTE]
+> A utility function given input it cannot handle aborts the run with an error
+> naming the offending file. `to_roman_numeral` does this for `0`, negative
+> numbers, non-integers, and anything above `3999`:
+>
+> ```console
+> $ rpl -au to_roman_numeral -e 's/(\d+)/to_roman_numeral($1)/e' *.txt
+> Expression 's/(\d+)/to_roman_numeral($1)/e' failed on 'ch 0.txt':
+> to_roman_numeral: `0' is not an integer between 1 and 3999
+> ```
+>
+> All new names are computed before any file is renamed, so an abort leaves
+> every file untouched — no batch is ever left half-renamed.
 
 ### Character Set Conversion
 
