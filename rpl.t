@@ -39,6 +39,39 @@ sub capture_sub_output {
 } ## end sub capture_sub_output
 
 
+# Absolute path to the script under test, captured before any test chdir()s away.
+my $RPL_SCRIPT = getcwd() . '/rpl';
+
+
+# Run ./rpl as a real subprocess and return its true exit code.
+# capture_sub_output() cannot observe exit codes: it calls main() as a function
+# and then exits 0 under its own steam, so the script's own `exit' line never
+# runs. Only a subprocess exercises the real exit path.
+sub run_script {
+  my ( $opts, @args ) = @_;
+  pipe my $out_reader, my $out_writer or die;
+  pipe my $err_reader, my $err_writer or die;
+  my $pid = fork();
+  defined $pid or die;
+  if ( $pid == 0 ) {
+    close $out_reader;
+    close $err_reader;
+    open STDOUT, '>&', fileno($out_writer) or die;
+    open STDERR, '>&', fileno($err_writer) or die;
+    if ( defined $opts->{cwd} ) { chdir $opts->{cwd} or die }
+    exec $EXECUTABLE_NAME, $RPL_SCRIPT, @args or exit 127;
+  } ## end if ( $pid == 0 )
+  close $out_writer;
+  close $err_writer;
+  my $stdout = do { local $RS = undef; <$out_reader> };
+  my $stderr = do { local $RS = undef; <$err_reader> };
+  close $out_reader;
+  close $err_reader;
+  waitpid( $pid, 0 ); ## no critic (RequireCheckedSyscalls)
+  return ( $CHILD_ERROR >> 8, $stdout, $stderr );
+} ## end sub run_script
+
+
 sub create_tempfile {
   my ( $content, $delim ) = @_;
   $delim //= "\n";
@@ -618,28 +651,16 @@ subtest 'main function' => sub {
   }; ## end 'Apply with overwrite' => sub
   subtest 'Error: source does not exist' => sub {
     my $temp = tempdir( CLEANUP => 1 );
-    my ( $exit, $out, $err ) = capture_sub_output(
-      sub {
-        chdir $temp or die;
-        local @ARGV = ( '-aes/foo/bar/', 'foo.txt' );
-        main();
-      }
-    );
-    is $exit, 255, 'Exits with error when source does not exist';
+    my ( $exit, $out, $err ) = run_script( { cwd => $temp }, '-aes/foo/bar/', 'foo.txt' );
+    is $exit, 1, 'Exits with error when source does not exist';
     is $err,  "Error: source file `foo.txt' does not exist.\n", 'Error message present';
   }; ## end 'Error: source does not exist' => sub
   subtest 'Error: target exists without overwrite' => sub {
     my $temp     = tempdir( CLEANUP => 1 );
     my $old_file = create_file("$temp/old.txt");
     my $new_file = create_file("$temp/new.txt");
-    my ( $exit, $out, $err ) = capture_sub_output(
-      sub {
-        chdir $temp or die;
-        local @ARGV = ( '-aes/old/new/', 'old.txt' );
-        main();
-      }
-    );
-    is $exit, 255, 'Exits with error when target exists';
+    my ( $exit, $out, $err ) = run_script( { cwd => $temp }, '-aes/old/new/', 'old.txt' );
+    is $exit, 1, 'Exits with error when target exists';
     is $err,  "Error: target file `new.txt' already exists.\n", 'Error message present';
     ok -e $old_file, 'Source file not renamed';
     ok -e $new_file, 'Target file still exists';
@@ -872,6 +893,57 @@ subtest 'error message formatting' => sub {
       ;;
   }; ## end 'Collision abort is prefixed but not hinted' => sub
 }; ## end 'error message formatting' => sub
+
+
+subtest 'exit codes' => sub {
+  subtest 'Successful runs exit 0' => sub {
+    my $temp = tempdir( CLEANUP => 1 );
+    create_file( "$temp/a.txt", 'content' );
+
+    my ($dry) = run_script( { cwd => $temp }, '-e', 's/a/b/', 'a.txt' );
+    is $dry, 0, 'Dry run exits 0';
+
+    my ($noop) = run_script( { cwd => $temp }, '-e', 's/zzz/q/', 'a.txt' );
+    is $noop, 0, 'Run matching nothing exits 0';
+
+    my ($apply) = run_script( { cwd => $temp }, '-a', '-e', 's/a/b/', 'a.txt' );
+    is $apply, 0, 'Applied rename exits 0';
+    ok -e "$temp/b.txt", 'Applied rename actually happened';
+  }; ## end 'Successful runs exit 0' => sub
+
+  subtest 'Informational options exit 0' => sub {
+    for my $opt (qw{ --help --version --list-prebaked }) {
+      my ($exit) = run_script( {}, $opt );
+      is $exit, 0, "$opt exits 0";
+    }
+  }; ## end 'Informational options exit 0' => sub
+
+  subtest 'Failing runs exit 1' => sub {
+    my $temp = tempdir( CLEANUP => 1 );
+    create_file( "$temp/a.txt",  'content' );
+    create_file( "$temp/a1.txt", 'one' );
+    create_file( "$temp/a2.txt", 'two' );
+
+    my @CASES = (
+      [ 'Unknown option',              ['--nosuchflag'] ],
+      [ 'No expressions given',        ['a.txt'] ],
+      [ 'No files given',              [ '-e', 's/a/b/' ] ],
+      [ 'Unknown charset',             [ '-c', 'nosuchcharset',  '-e', 's/a/b/', 'a.txt' ] ],
+      [ 'Missing --from-file target',  [ '-e', 's/a/b/',         '-f', 'nosuchfile.txt' ] ],
+      [ 'Uncompilable expression',     [ '-e', 's/a/b/(',        'a.txt' ] ],
+      [ 'Expression dying at runtime', [ '-e', 'die "boom\n"',   'a.txt' ] ],
+      [ 'Target name collision',       [ '-e', 's/\d//',         'a1.txt', 'a2.txt' ] ],
+      [ 'Unknown prebaked expression', [ '-p', 'nosuchprebaked', 'a.txt' ] ],
+    );
+    for my $case (@CASES) {
+      my ( $name, $args ) = @{$case};
+      my ( $exit, $out, $err ) = run_script( { cwd => $temp }, @{$args} );
+      is $exit,  1,   "$name exits 1";
+      isnt $err, q{}, "$name explains itself on stderr";
+      unlike $err, qr/at \S+ line \d+/sm, "$name reports without leaking a source location";
+    } ## end for my $case (@CASES)
+  }; ## end 'Failing runs exit 1' => sub
+}; ## end 'exit codes' => sub
 
 
 done_testing;

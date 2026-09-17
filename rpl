@@ -32,7 +32,7 @@ use List::Util           qw{ max };
 use File::Basename       qw{ basename dirname };
 
 use version 0.77 ();
-our $VERSION = version->declare('v3.2.1');
+our $VERSION = version->declare('v3.2.2');
 
 my $help_message = <<~";;";
   rpl @{[ $VERSION->stringify() ]} - Rename files using Perl expressions
@@ -508,7 +508,9 @@ sub perform_renames {
 } ## end sub perform_renames
 
 
-# Main entry point.
+# Main entry point. Returns the process exit code: 0 on success, 1 on failure.
+# Errors are reported by die() throughout; catching them here keeps the exit
+# code deliberate instead of letting die() leak whatever errno happens to be set.
 sub main {
   binmode STDOUT, ':encoding(utf-8)';
   binmode STDERR, ':encoding(utf-8)';
@@ -518,14 +520,19 @@ sub main {
   # would only mislead for the runtime failures caught here.
   local $SIG{__DIE__} = sub { die format_error( $_[0] ) };
 
-  my $params = params_get(@ARGV);
-  my ( $old_names, $new_names, $temp_names ) = transform_names($params);
-  perform_renames( $params, $old_names, $new_names, $temp_names );
-  return 0;
+  my $ok = eval {
+    my $params = params_get(@ARGV);
+    my ( $old_names, $new_names, $temp_names ) = transform_names($params);
+    perform_renames( $params, $old_names, $new_names, $temp_names );
+    1;
+  };
+  return 0 if $ok;
+  print {*STDERR} $EVAL_ERROR;
+  return 1;
 } ## end sub main
 
 
-exit !main() unless caller;                         # Run main() if the script is executed directly.
+exit main() unless caller;                          # Run main() if the script is executed directly.
 
 
 1;
