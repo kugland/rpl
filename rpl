@@ -280,7 +280,7 @@ my %PREBAKED_EXPRESSIONS = (
 # Get the expression with the given name.
 sub prebaked_get {
   my ($name) = @_;
-  die "Unknown prebaked expression: $name" unless exists $PREBAKED_EXPRESSIONS{$name};
+  die "Unknown prebaked expression: $name\n" unless exists $PREBAKED_EXPRESSIONS{$name};
   my ( $desc, @exprs ) = @{ $PREBAKED_EXPRESSIONS{$name} };
   return join q{; }, @exprs;
 } ## end sub prebaked_get
@@ -493,18 +493,25 @@ sub perform_renames {
 } ## end sub perform_renames
 
 
-# Main entry point.
+# Main entry point. Returns the process exit code: 0 on success, 1 on failure.
+# Errors are reported by die() throughout; catching them here keeps the exit
+# code deliberate instead of letting die() leak whatever errno happens to be set.
 sub main {
   binmode STDOUT, ':encoding(utf-8)';
   binmode STDERR, ':encoding(utf-8)';
-  my $params = params_get(@ARGV);
-  my ( $old_names, $new_names, $temp_names ) = transform_names($params);
-  perform_renames( $params, $old_names, $new_names, $temp_names );
-  return 0;
+  my $ok = eval {
+    my $params = params_get(@ARGV);
+    my ( $old_names, $new_names, $temp_names ) = transform_names($params);
+    perform_renames( $params, $old_names, $new_names, $temp_names );
+    1;
+  };
+  return 0 if $ok;
+  print {*STDERR} $EVAL_ERROR;
+  return 1;
 } ## end sub main
 
 
-exit !main() unless caller;                         # Run main() if the script is executed directly.
+exit main() unless caller;                          # Run main() if the script is executed directly.
 
 
 1;
