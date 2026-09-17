@@ -42,6 +42,8 @@ my $help_message = <<~";;";
     -e, --expr=EXPR         Perl expression to apply (can be used multiple times)
     -s, --script=FILE       Read Perl expressions from a file (- for stdin)
     -p, --prebaked=NAME     Use a prebaked expression (see --list-prebaked)
+    -u, --util=NAME[,...]   Make a utility function visible to the expressions
+                            (can be used multiple times; see --list-utils)
     -f, --from-file=FILE    Read list of files to rename from FILE (- for stdin)
     -d, --delim=CHAR        Set delimiter for --from-file (default: newline)
     -0, --null              Use NUL as delimiter for --from-file
@@ -58,6 +60,7 @@ my $help_message = <<~";;";
     -h, --help              Show this help message
     -V, --version           Show version information
     -l, --list-prebaked     List available prebaked expressions
+        --list-utils        List available utility functions
 
   The boolean options, `--basename', `--exclude-ext', `--overwrite',
   `--check-collisions', `--apply', and `--mkdirp', can be negated by prefixing
@@ -99,6 +102,7 @@ sub params_get {
 
   my $params = {
     exprs            => [],                         # Perl expressions to be applied.
+    utils            => [],                         # Utility functions visible to the expressions.
     files            => [],                         # Files to be renamed.
     from_charset     => undef,                      # Charset of the names in the files.
     to_charset       => undef,                      # Charset of the names to be written.
@@ -126,9 +130,15 @@ sub params_get {
     local $SIG{__WARN__} = sub { die $_[0] };
 
     $parser->getoptionsfromarray( \@argv,
-      'expr|e=s@'           => \$params->{exprs},
-      'prebaked|p=s'        => sub { push @{ $params->{exprs} }, prebaked_get( $_[1] ); },
-      'script|s=s'          => sub { push @{ $params->{exprs} }, read_file( $_[1], undef ); },
+      'expr|e=s@'    => \$params->{exprs},
+      'prebaked|p=s' => sub { push @{ $params->{exprs} }, prebaked_get( $_[1] ); },
+      'script|s=s'   => sub { push @{ $params->{exprs} }, read_file( $_[1], undef ); },
+      'util|u=s'     => sub {
+        for my $name ( split m{ , }msx, $_[1] ) {
+          utils_get($name);                         # Validate the name; dies if unknown.
+          push @{ $params->{utils} }, $name;
+        }
+      },
       'from-file|f=s'       => sub { push @{ $params->{files} }, read_file( $_[1], $delim ); },
       'delim|d=s'           => \$delim,
       'null|0'              => sub { $delim = "\0"; },
@@ -143,6 +153,7 @@ sub params_get {
       'help|h'              => sub { say $help_message;                      exit 0; },
       'version|V'           => sub { say "rpl @{[ $VERSION->stringify() ]}"; exit 0; },
       'list-prebaked|l'     => sub { prebaked_list();                        exit 0; },
+      'list-utils'          => sub { utils_list();                           exit 0; },
       'verbose|v+'          => sub { $params->{verbosity}++; },
       'quiet|q+'            => sub { $params->{verbosity}--; },
     );
@@ -156,6 +167,9 @@ sub params_get {
     my %seen = ();                                  # Deduplicate the list of files.
     $params->{files} = [ grep { !$seen{$_}++ } @{ $params->{files} } ];
 
+    my %seen_util = ();                             # Deduplicate the list of utility functions.
+    $params->{utils} = [ grep { !$seen_util{$_}++ } @{ $params->{utils} } ];
+
     die "no files provided\n" unless @{ $params->{files} };
 
     for my $opt (qw{ from_charset to_charset }) {
@@ -167,6 +181,10 @@ sub params_get {
 
     $params->{verbosity} = 0 if $params->{verbosity} < 0;  # Clamp verbosity to 0.
   };
+
+  # Install the selected utility functions before compiling, so that they are
+  # already declared when the expressions are compiled.
+  utils_install( @{ $params->{utils} } );
 
   # Compile the expressions.
   $params->{exprs} = compile_exprs( @{ $params->{exprs} } );
@@ -193,6 +211,11 @@ sub read_file {
 } ## end sub read_file
 
 
+# The package the expressions are compiled into, and into which the selected
+# utility functions are installed.
+my $EVAL_PACKAGE = 'Isolated::Eval::Context';
+
+
 # Compile expressions into anonymous subroutines.
 sub compile_exprs {
   my (@exprs) = @_;
@@ -201,7 +224,7 @@ sub compile_exprs {
   for my $expr (@exprs) {
     $expr = $utf8->decode($expr) unless utf8::is_utf8($expr);
     my $code = <<~";;";
-      package Isolated::Eval::Context;
+      package $EVAL_PACKAGE;
       sub {
         no strict; no warnings; use utf8;
         local \$_ = \$_[0];
@@ -311,6 +334,77 @@ sub prebaked_list {
   } ## end for my $name ( sort keys...)
   return;
 } ## end sub prebaked_list
+
+
+# Convert an integer in the range 1..3999 to a Roman numeral.
+sub to_roman_numeral {
+  ## no critic (ProhibitMagicNumbers) -- the numerals below are the domain's own values.
+  my ($value) = @_;
+  $value //= q{};
+  die "to_roman_numeral: `$value' is not an integer between 1 and 3999\n"
+    if $value !~ m{ \A \d+ \z }msx or $value < 1 or $value > 3999;
+  state @NUMERALS = (
+    [ 1000, 'M' ], [ 900, 'CM' ], [ 500, 'D' ], [ 400, 'CD' ],
+    [ 100,  'C' ], [ 90,  'XC' ], [ 50,  'L' ], [ 40,  'XL' ],
+    [ 10,   'X' ], [ 9,   'IX' ], [ 5,   'V' ], [ 4,   'IV' ],
+    [ 1,    'I' ],
+  );
+  my $roman = q{};
+  for my $numeral (@NUMERALS) {
+    my ( $weight, $symbol ) = @{$numeral};
+    while ( $value >= $weight ) {
+      $roman .= $symbol;
+      $value -= $weight;
+    }
+  } ## end for my $numeral (@NUMERALS)
+  return $roman;
+} ## end sub to_roman_numeral
+
+
+# Utility functions, made visible to the expressions by --util.
+my %UTIL_FUNCTIONS = (
+  'to_roman_numeral' => {
+    sig  => 'to_roman_numeral($n)',
+    desc => 'Convert an integer between 1 and 3999 to a Roman numeral',
+    func => \&to_roman_numeral,
+  },
+);
+
+
+# Get the utility function with the given name.
+sub utils_get {
+  my ($name) = @_;
+  die "Unknown utility function: $name" unless exists $UTIL_FUNCTIONS{$name};
+  return $UTIL_FUNCTIONS{$name}{func};
+}
+
+
+# Install the named utility functions into the expression package. Functions
+# that were not selected never enter it, so the namespace the expressions see
+# stays limited to what was asked for.
+sub utils_install {
+  my (@names) = @_;
+  no strict 'refs'; ## no critic (ProhibitNoStrict)
+  for my $name (@names) {
+    *{"${EVAL_PACKAGE}::$name"} = utils_get($name);
+  }
+  return;
+} ## end sub utils_install
+
+
+# List all available utility functions.
+sub utils_list {
+  binmode STDOUT, ':encoding(utf-8)';
+  say q{The following utility functions are available:};
+  say q{};
+  my $colwidth = max map { length $UTIL_FUNCTIONS{$_}{sig} } keys %UTIL_FUNCTIONS;
+  for my $name ( sort keys %UTIL_FUNCTIONS ) {
+    my ( $sig, $desc ) = @{ $UTIL_FUNCTIONS{$name} }{qw{ sig desc }};
+    printf "  %s %s %s\n", $sig, q{ } x ( $colwidth - length $sig ), $desc;
+  }
+  say q{};
+  return;
+} ## end sub utils_list
 
 
 # Transform filenames using the provided expressions.
