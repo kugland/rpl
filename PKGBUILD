@@ -1,6 +1,6 @@
 # Maintainer: André Kugland <akugland@example.com>
 pkgname=rpl
-pkgver=3.2.3
+pkgver=3.2.4
 pkgrel=1
 pkgdesc="Rename files using Perl expressions"
 arch=('any')
