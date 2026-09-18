@@ -336,29 +336,64 @@ sub prebaked_list {
 } ## end sub prebaked_list
 
 
+# Symbol weights, heaviest first, with each subtractive pair sitting just above
+# the symbol it is built from. Both directions walk this table in this order.
+## no critic (ProhibitMagicNumbers) -- the numerals below are the domain's own values.
+my @ROMAN_NUMERALS = (
+  [ 1000, 'M' ], [ 900, 'CM' ], [ 500, 'D' ], [ 400, 'CD' ],
+  [ 100,  'C' ], [ 90,  'XC' ], [ 50,  'L' ], [ 40,  'XL' ],
+  [ 10,   'X' ], [ 9,   'IX' ], [ 5,   'V' ], [ 4,   'IV' ],
+  [ 1,    'I' ],
+);
+## use critic
+
+
+# The one spelling of each value that `to_roman' emits. Anchored and built from
+# the subtractive pairs, so `IIII' and `IM' fail to match even though a lenient
+# reader could assign them a value. Note that it also matches the empty string;
+# `from_roman' rules that out separately.
+my $CANONICAL_ROMAN = qr{
+  \A M{0,3} (?: CM | CD | D?C{0,3} ) (?: XC | XL | L?X{0,3} ) (?: IX | IV | V?I{0,3} ) \z
+}msx;
+
+
 # Convert an integer in the range 1..3999 to a Roman numeral.
 sub to_roman {
-  ## no critic (ProhibitMagicNumbers) -- the numerals below are the domain's own values.
+  ## no critic (ProhibitMagicNumbers) -- the bounds below are the domain's own values.
   my ($value) = @_;
   $value //= q{};
   die "to_roman: `$value' is not an integer between 1 and 3999\n"
     if $value !~ m{ \A \d+ \z }msx or $value < 1 or $value > 3999;
-  state @NUMERALS = (
-    [ 1000, 'M' ], [ 900, 'CM' ], [ 500, 'D' ], [ 400, 'CD' ],
-    [ 100,  'C' ], [ 90,  'XC' ], [ 50,  'L' ], [ 40,  'XL' ],
-    [ 10,   'X' ], [ 9,   'IX' ], [ 5,   'V' ], [ 4,   'IV' ],
-    [ 1,    'I' ],
-  );
   my $roman = q{};
-  for my $numeral (@NUMERALS) {
+  for my $numeral (@ROMAN_NUMERALS) {
     my ( $weight, $symbol ) = @{$numeral};
     while ( $value >= $weight ) {
       $roman .= $symbol;
       $value -= $weight;
     }
-  } ## end for my $numeral (@NUMERALS)
+  } ## end for my $numeral (@ROMAN_NUMERALS)
   return $roman;
 } ## end sub to_roman
+
+
+# Convert a Roman numeral in the range I..MMMCMXCIX to an integer. Case is
+# ignored, but the spelling is not: only the canonical form `to_roman' produces
+# is accepted, which makes the two exact inverses of each other.
+sub from_roman {
+  my ($value) = @_;
+  $value //= q{};
+  my $roman = uc $value;
+  die "from_roman: `$value' is not a Roman numeral between I and MMMCMXCIX\n"
+    if $roman eq q{} or $roman !~ $CANONICAL_ROMAN;
+  my $total = 0;
+  for my $numeral (@ROMAN_NUMERALS) {
+    my ( $weight, $symbol ) = @{$numeral};
+    while ( $roman =~ s{ \A \Q$symbol\E }{}msx ) {
+      $total += $weight;
+    }
+  } ## end for my $numeral (@ROMAN_NUMERALS)
+  return $total;
+} ## end sub from_roman
 
 
 # Utility functions, made visible to the expressions by --util.
@@ -367,6 +402,11 @@ my %UTIL_FUNCTIONS = (
     sig  => 'to_roman($n)',
     desc => 'Convert an integer between 1 and 3999 to a Roman numeral',
     func => \&to_roman,
+  },
+  'from_roman' => {
+    sig  => 'from_roman($s)',
+    desc => 'Convert a Roman numeral between I and MMMCMXCIX to an integer',
+    func => \&from_roman,
   },
 );
 

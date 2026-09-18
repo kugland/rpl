@@ -329,8 +329,10 @@ subtest 'prebaked exprs' => sub {
 }; ## end 'prebaked exprs' => sub
 
 
-# Parse a Roman numeral back to an integer. Test-only inverse of
-# `to_roman`, used to round-trip the whole 1..3999 range.
+# Parse a Roman numeral back to an integer. Test-only inverse of `to_roman`,
+# used to round-trip the whole 1..3999 range. Deliberately kept independent of
+# the production `from_roman`: it shares no code with it, so a round trip
+# through this oracle cannot be satisfied by a bug the two functions agree on.
 sub roman_to_int {
   my ($roman) = @_;
   my %value   = ( I => 1, V => 5, X => 10, L => 50, C => 100, D => 500, M => 1000 );
@@ -368,6 +370,7 @@ subtest 'utils_list' => sub {
   is $exit, 0, 'Exits successfully';
   like $out, qr/The following utility functions are available:/sm, 'Header present';
   like $out, qr/to_roman/sm,                                       'Lists to_roman';
+  like $out, qr/from_roman/sm,                                     'Lists from_roman';
   is $err, q{}, 'No stderr output';
 }; ## end 'utils_list' => sub
 
@@ -402,6 +405,49 @@ subtest 'to_roman' => sub {
 }; ## end 'to_roman' => sub
 
 
+subtest 'from_roman' => sub {
+  ## no critic (ProhibitMagicNumbers) -- the numerals below are the domain's own values.
+  my $from_roman = utils_get('from_roman');
+  subtest 'Converts canonical numerals in range' => sub {
+    my @CASES = (
+      [ 'I',      1 ],    [ 'II',        2 ],    [ 'III',        3 ],   [ 'IV',  4 ],
+      [ 'V',      5 ],    [ 'IX',        9 ],    [ 'X',          10 ],  [ 'XIV', 14 ],
+      [ 'XIX',    19 ],   [ 'XL',        40 ],   [ 'XLIX',       49 ],  [ 'L',   50 ],
+      [ 'XC',     90 ],   [ 'C',         100 ],  [ 'CD',         400 ], [ 'D',   500 ],
+      [ 'CM',     900 ],  [ 'M',         1000 ], [ 'MCMLXXXVII', 1987 ],
+      [ 'MMXXIV', 2024 ], [ 'MMMCMXCIX', 3999 ],
+    );
+    for my $case (@CASES) {
+      my ( $input, $output ) = @{$case};
+      is $from_roman->($input), $output, "$input -> $output";
+    }
+  }; ## end 'Converts canonical numerals in range' => sub
+  subtest 'Inverts to_roman across the whole 1..3999 range' => sub {
+    my $to_roman = utils_get('to_roman');
+    my @bad      = grep { $from_roman->( $to_roman->($_) ) != $_ } 1 .. 3999;
+    is scalar @bad,                      0,  'Every value round-trips';
+    is $from_roman->( $to_roman->($_) ), $_, "Round-trip failed for $_" for @bad;
+  }; ## end 'Inverts to_roman across the whole 1..3999 range' => sub
+  subtest 'Accepts lowercase and mixed case' => sub {
+    is $from_roman->('xix'),        19,   'Lowercase xix';
+    is $from_roman->('XiX'),        19,   'Mixed-case XiX';
+    is $from_roman->('mcmlxxxvii'), 1987, 'Lowercase mcmlxxxvii';
+    is $from_roman->('mMmCmXcIx'),  3999, 'Mixed-case mMmCmXcIx';
+  }; ## end 'Accepts lowercase and mixed case' => sub
+  subtest 'Rejects non-canonical numerals' => sub {
+    for my $bad (qw{ IIII VV XXXX LL DD MMMM IM IC XM VX IIX XIIX VIV }) {
+      throws_ok { $from_roman->($bad) } qr/from_roman/ism, "Dies on `$bad'";
+    }
+  };
+  subtest 'Rejects empty and non-numeral input' => sub {
+    for my $bad ( q{}, 'foo', '19', 'XIX ', ' XIX', 'X I X', "XIX\n", 'MCMLXXXVIIA', 'A' ) {
+      throws_ok { $from_roman->($bad) } qr/from_roman/ism, "Dies on `$bad'";
+    }
+    throws_ok { $from_roman->(undef) } qr/from_roman/ism, 'Dies on undef';
+  }; ## end 'Rejects empty and non-numeral input' => sub
+}; ## end 'from_roman' => sub
+
+
 subtest 'util option' => sub {
   subtest 'Installs into the expression package' => sub {
     my $p = params_get( '--util=to_roman', '-e', 's/(\d+)/to_roman($1)/e', 'a' );
@@ -409,6 +455,12 @@ subtest 'util option' => sub {
     ok Isolated::Eval::Context->can('to_roman'), 'Installed in expression package';
     is $p->{exprs}[0]{func}->('track 19.mp3'), 'track XIX.mp3', 'Expression can call it';
   }; ## end 'Installs into the expression package' => sub
+  subtest 'Installs from_roman into the expression package' => sub {
+    my $p = params_get( '-u', 'to_roman,from_roman', '-e', 's/([IVXLCDM]+)/from_roman($1)/e', 'a' );
+    is_deeply $p->{utils}, [ 'to_roman', 'from_roman' ], 'Both utilities recorded in order';
+    ok Isolated::Eval::Context->can('from_roman'), 'Installed in expression package';
+    is $p->{exprs}[0]{func}->('track XIX.mp3'), 'track 19.mp3', 'Expression can call it';
+  }; ## end 'Installs from_roman into the expression package' => sub
   subtest 'Accepts short form, repetition and comma-separated lists' => sub {
     my $p = params_get( '-u', 'to_roman', '-e', '$_', 'a' );
     is_deeply $p->{utils}, ['to_roman'], 'Short form works';
@@ -645,6 +697,7 @@ subtest 'main function' => sub {
     is $exit, 0, 'List-utils exits successfully';
     like $out, qr/The following utility functions are available:/sm, 'List output present';
     like $out, qr/to_roman/sm,                                       'Lists to_roman';
+    like $out, qr/from_roman/sm,                                     'Lists from_roman';
   }; ## end 'List utils' => sub
   # Characterization test: this behaviour predates --util (transform_names
   # computes every new name before perform_renames runs), but the README now

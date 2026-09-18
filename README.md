@@ -272,16 +272,23 @@ expressions; the rest never enter the namespace.
 These are the available utility functions (you can also list them by running
 `rpl --list-utils`):
 
-- `to_roman($n)`: Convert an integer between 1 and 3999 to a Roman
-  numeral.
+- `to_roman($n)`: Convert an integer between 1 and 3999 to a Roman numeral.
+- `from_roman($s)`: Convert a Roman numeral between `I` and `MMMCMXCIX` to an
+  integer. Case is ignored, but the spelling is not: only the canonical form
+  `to_roman` produces is accepted, so `IIII` and `IM` are errors rather than
+  `4` and `999`.
 
 ```console
 # Turn chapter numbers into Roman numerals:
 rpl -u to_roman -e 's/(\d+)/to_roman($1)/e' *.txt
 # `chapter 19.txt' -> `chapter XIX.txt'
 
+# And back again:
+rpl -u from_roman -e 's/([IVXLCDM]+)/from_roman($1)/e' *.txt
+# `chapter XIX.txt' -> `chapter 19.txt'
+
 # Several functions at once (repeat -u, or separate names with commas):
-rpl -u to_roman,other_function -e '...' *
+rpl -u to_roman,from_roman -e '...' *
 ```
 
 > [!NOTE]
