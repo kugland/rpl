@@ -13,8 +13,8 @@ collision detection, and more.
   transformations.
 - **Prebaked Expressions**: Quick access to common transformations (Unicode
   normalization, diacritic removal, whitespace trimming, &c).
-- **Utility Functions**: Opt-in helper functions callable from your expressions
-  (see `--list-utils`).
+- **Utility Functions**: Opt-in helper functions callable from your
+  expressions, including every prebaked expression (see `--list-utils`).
 - **Character Set Conversion**: Convert filenames between different character
   encodings (e.g., latin1, utf-16le, utf-8).
 - **Collision Detection**: Automatically detects and handles filename
@@ -263,11 +263,11 @@ are the available prebaked expressions (you can also list them by running
 
 ### Utility Functions
 
-Utility functions are helpers you can call from your expressions. Unlike
-prebaked expressions, they are not transformations in themselves — they are
-building blocks for your own. Each one must be requested explicitly with
-`--util` / `-u`, and only the ones you request are made visible to the
-expressions; the rest never enter the namespace.
+Utility functions are helpers you can call from your expressions: building
+blocks for a transformation of your own, rather than transformations of the
+whole name. Each one must be requested explicitly with `--util` / `-u`, and
+only the ones you request are made visible to the expressions; the rest never
+enter the namespace.
 
 These are the available utility functions (you can also list them by running
 `rpl --list-utils`):
@@ -289,6 +289,18 @@ rpl -u from_roman -e 's/([IVXLCDM]+)/from_roman($1)/e' *.txt
 
 # Several functions at once (repeat -u, or separate names with commas):
 rpl -u to_roman,from_roman -e '...' *
+```
+
+Every prebaked expression is a utility function as well, named after it with
+underscores in place of hyphens: `strip-diacritics` is `strip_diacritics($s)`.
+Where `--prebaked` transforms the whole name, the function transforms only
+what you hand it:
+
+```console
+# Strip diacritics from the artist, and leave the title as it is:
+rpl -u strip_diacritics -e 's/\A(.+?) - /strip_diacritics($1) . " - "/e' *.mp3
+# `Céline Dion - Pour que tu m'aimes encore.mp3'
+#   -> `Celine Dion - Pour que tu m'aimes encore.mp3'
 ```
 
 > [!NOTE]

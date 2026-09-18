@@ -351,7 +351,8 @@ subtest 'utils absent until selected' => sub {
   ok !Isolated::Eval::Context->can('to_roman'), 'Not in expression package before selection';
   my $p = params_get( '-e', '$_', 'a' );
   ok !Isolated::Eval::Context->can('to_roman'), 'Still absent when --util is not given';
-};
+  ok !Isolated::Eval::Context->can('trim'),     'Prebaked-derived utility absent as well';
+}; ## end 'utils absent until selected' => sub
 
 
 subtest 'utils_get' => sub {
@@ -476,6 +477,59 @@ subtest 'util option' => sub {
     throws_ok { transform_name( $p, 'track 0.mp3' ) } qr/track\ 0\.mp3/msx, 'Error names the file';
   };
 }; ## end 'util option' => sub
+
+
+subtest 'prebaked utility functions' => sub {
+  subtest 'Applies a single-expression prebaked to its argument' => sub {
+    my $func = utils_get('strip_diacritics');
+    is $func->('Édition Française'), 'Edition Francaise', 'Diacritics removed from the argument';
+  };
+  subtest 'Applies every expression of a multi-expression prebaked' => sub {
+    my $func = utils_get('collapse_blanks');
+    is $func->('  a   b  '), 'a b', 'Blanks collapsed and trimmed';
+  };
+  subtest 'Is selected by --util like any other utility' => sub {
+    my $p = params_get( '-u', 'strip_diacritics', '-e', 's/(.+)/strip_diacritics($1)/e', 'a' );
+    is_deeply $p->{utils}, ['strip_diacritics'], 'Selected utility recorded';
+    ok Isolated::Eval::Context->can('strip_diacritics'), 'Installed in expression package';
+    is $p->{exprs}[0]{func}->('Ação'), 'Acao', 'Expression can call it';
+  }; ## end 'Is selected by --util like any other utility' => sub
+  subtest 'Is known only under its underscored name' => sub {
+    throws_ok { utils_get('strip-diacritics') } qr/unknown utility function/ism,
+      'Hyphenated name rejected';
+  };
+  subtest 'Treats a missing argument as the empty string' => sub {
+    is utils_get('trim')->(undef), q{}, 'undef trims to the empty string';
+  };
+  subtest 'Names itself when its expression cannot be compiled' => sub {
+    local %INC = %INC;                              # Hide the module the expression requires,
+    delete $INC{'Unicode/Normalize.pm'};            # so that compiling it is bound to fail.
+    local @INC = ();
+    throws_ok { utils_get('normalize_nfkd') } qr/normalize_nfkd/ms,    'Error names the utility';
+    throws_ok { utils_get('normalize_nfkd') } qr/Unicode.Normalize/ms, 'Error names the cause';
+    unlike $EVAL_ERROR, qr/compilation\ failed\ for\ expr/imsx, 'Without the expression preamble';
+  }; ## end 'Names itself when its expression cannot be compiled' => sub
+  subtest 'Is listed beside the hand-written utilities' => sub {
+    my ( $exit, $out, $err ) = capture_sub_output( sub { utils_list() } );
+    is $exit, 0, 'Exits successfully';
+    like $out, qr/strip_diacritics\(\$s\)/sm,          'Lists the derived signature';
+    like $out, qr/Remove\ diacritics\ from\ names/msx, 'Reuses the prebaked description';
+    like $out, qr/to_roman/sm,                         'Hand-written utilities still listed';
+    is utils_get('to_roman'), \&to_roman, 'Hand-written utilities not overwritten';
+    is $err,                  q{},        'No stderr output';
+  }; ## end 'Is listed beside the hand-written utilities' => sub
+  subtest 'Matches the prebaked expression it was made from' => sub {
+    my $sample = q{  Ação "Nº 3" <a\b|c> ＂＊／ 19  };
+    my ( $exit, $out ) = capture_sub_output( sub { prebaked_list() } );
+    my @names = decode( 'utf-8', $out ) =~ m{ ^ [ ]{2} (\S+) }gmsx;
+    cmp_ok scalar @names, '>', 0, 'Prebaked expressions found to compare against';
+    for my $name (@names) {
+      ( my $fname = $name ) =~ tr{-}{_};
+      my $p = params_get( '-p', $name, 'a' );
+      is utils_get($fname)->($sample), $p->{exprs}[0]{func}->($sample), "$fname matches -p $name";
+    }
+  }; ## end 'Matches the prebaked expression it was made from' => sub
+}; ## end 'prebaked utility functions' => sub
 
 
 subtest 'transform_names' => sub {

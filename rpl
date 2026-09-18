@@ -411,12 +411,44 @@ my %UTIL_FUNCTIONS = (
 );
 
 
-# Get the utility function with the given name.
+# Every prebaked expression is also a utility function, so an expression can
+# apply one to part of a name instead of to the whole one. The name becomes a
+# Perl identifier on the way in: `strip-diacritics' is `strip_diacritics($s)'.
+for my $name ( keys %PREBAKED_EXPRESSIONS ) {
+  my ($desc) = @{ $PREBAKED_EXPRESSIONS{$name} };
+  ( my $fname = $name ) =~ tr{-}{_};
+  $UTIL_FUNCTIONS{$fname} = {
+    sig  => "$fname(\$s)",
+    desc => $desc,
+    expr => prebaked_get($name),
+  };
+} ## end for my $name ( keys %PREBAKED_EXPRESSIONS)
+
+
+# Get the utility function with the given name. The ones derived from prebaked
+# expressions are compiled here, on first use, so that an unselected one never
+# runs the `BEGIN { require ... }' lines that pull in its modules.
 sub utils_get {
   my ($name) = @_;
-  die "Unknown utility function: $name" unless exists $UTIL_FUNCTIONS{$name};
-  return $UTIL_FUNCTIONS{$name}{func};
-}
+  my $util = $UTIL_FUNCTIONS{$name};
+  die "Unknown utility function: $name" unless defined $util;
+  return $util->{func} //= utils_compile( $name, $util->{expr} );
+} ## end sub utils_get
+
+
+# Compile a prebaked expression into a function of one argument, applying it to
+# that argument the way it would be applied to a whole name. A failure here is
+# the modules the expression requires missing, so the message names the utility
+# that was asked for rather than the expression standing behind it.
+sub utils_compile {
+  my ( $name, $expr ) = @_;
+  my $func = eval { compile_exprs($expr)->[0]{func} } // do {
+    my $err = $EVAL_ERROR;
+    $err =~ s{ \A Compilation \s failed \s for \s expr \s [^\n]* \n }{}msx;
+    die "Can't enable utility function `$name': $err";
+  };
+  return sub { return $func->( $_[0] // q{} ); };
+} ## end sub utils_compile
 
 
 # Install the named utility functions into the expression package. Functions
