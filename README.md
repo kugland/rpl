@@ -156,8 +156,9 @@ Add to your `home.nix`:
 - `-e`, `--expr=EXPR`: Perl expression to apply (can be used multiple times).
 - `-s`, `--script=FILE`: Read Perl expressions from a file (`-` for stdin).
 - `-p`, `--prebaked=NAME`: Use a prebaked expression (see `--list-prebaked`).
-- `-u`, `--util=NAME[,...]`: Make a utility function visible to the expressions
-  (can be used multiple times; see `--list-utils`).
+- `-u`, `--util=[AS=]NAME`: Make a utility function visible to the expressions,
+  optionally under the name `AS` (can be used multiple times and comma-separated;
+  see `--list-utils`).
 
 *File Input Options*
 
@@ -302,6 +303,22 @@ rpl -u strip_diacritics -e 's/\A(.+?) - /strip_diacritics($1) . " - "/e' *.mp3
 # `Céline Dion - Pour que tu m'aimes encore.mp3'
 #   -> `Celine Dion - Pour que tu m'aimes encore.mp3'
 ```
+
+A utility can be made visible under a name of your own with `AS=NAME`, which
+is worth doing when a name is long and the expression calls it more than once.
+Only the name you choose enters the namespace; the original does not:
+
+```console
+# Give the longer names something shorter to answer to:
+rpl -u cw=collapse_blanks,sd=strip_diacritics,r=to_roman \
+    -e 's/\A(.+?) - (\d+) - /cw(sd($1)) . " - " . r($2) . " - "/e' *.mp3
+# `Céline  Dion - 19 - Song.mp3' -> `Celine Dion - XIX - Song.mp3'
+```
+
+> [!NOTE]
+> A name must be a Perl identifier, and it can stand for only one utility:
+> `-u r=to_roman -u r=trim` aborts before any name is computed. The right-hand
+> side is always a name from `--list-utils` — `-u x=r=to_roman` does not chain.
 
 > [!NOTE]
 > Note the `/e` flag on the substitution above: without it, Perl treats the

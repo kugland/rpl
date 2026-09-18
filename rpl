@@ -42,8 +42,9 @@ my $help_message = <<~";;";
     -e, --expr=EXPR         Perl expression to apply (can be used multiple times)
     -s, --script=FILE       Read Perl expressions from a file (- for stdin)
     -p, --prebaked=NAME     Use a prebaked expression (see --list-prebaked)
-    -u, --util=NAME[,...]   Make a utility function visible to the expressions
-                            (can be used multiple times; see --list-utils)
+    -u, --util=[AS=]NAME    Make a utility function visible to the expressions,
+                            optionally under the name AS (can be used multiple
+                            times and comma-separated; see --list-utils)
     -f, --from-file=FILE    Read list of files to rename from FILE (- for stdin)
     -d, --delim=CHAR        Set delimiter for --from-file (default: newline)
     -0, --null              Use NUL as delimiter for --from-file
@@ -134,10 +135,7 @@ sub params_get {
       'prebaked|p=s' => sub { push @{ $params->{exprs} }, prebaked_get( $_[1] ); },
       'script|s=s'   => sub { push @{ $params->{exprs} }, read_file( $_[1], undef ); },
       'util|u=s'     => sub {
-        for my $name ( split m{ , }msx, $_[1] ) {
-          utils_get($name);                         # Validate the name; dies if unknown.
-          push @{ $params->{utils} }, $name;
-        }
+        push @{ $params->{utils} }, map { utils_parse($_) } split m{ , }msx, $_[1];
       },
       'from-file|f=s'       => sub { push @{ $params->{files} }, read_file( $_[1], $delim ); },
       'delim|d=s'           => \$delim,
@@ -167,8 +165,14 @@ sub params_get {
     my %seen = ();                                  # Deduplicate the list of files.
     $params->{files} = [ grep { !$seen{$_}++ } @{ $params->{files} } ];
 
-    my %seen_util = ();                             # Deduplicate the list of utility functions.
-    $params->{utils} = [ grep { !$seen_util{$_}++ } @{ $params->{utils} } ];
+    my %seen_util = ();                             # Deduplicate the list of utility functions,
+    my %util_of   = ();                             # and reject one name asked to mean two.
+    $params->{utils} = [ grep { !$seen_util{ join q{=}, @{$_} }++ } @{ $params->{utils} } ];
+    for my $util ( @{ $params->{utils} } ) {
+      my ( $as, $name ) = @{$util};
+      die "Utility function `$as' is already defined as `$util_of{$as}'\n" if $util_of{$as};
+      $util_of{$as} = $name;
+    }
 
     die "no files provided\n" unless @{ $params->{files} };
 
@@ -451,14 +455,28 @@ sub utils_compile {
 } ## end sub utils_compile
 
 
+# Parse a --util item, either `NAME' or `AS=NAME', into the pair of the name the
+# utility is installed under and the utility itself. Both halves are checked
+# here, so that a typo in either is reported before anything is compiled.
+sub utils_parse {
+  my ($item) = @_;
+  my ( $as, $name ) = $item =~ m{ \A (?: ([^=]*) = )? (.*) \z }msx;
+  $as //= $name;
+  die "Invalid utility function name: $as\n" unless $as =~ m{ \A [[:alpha:]_] \w* \z }msx;
+  utils_get($name);                                 # Validate the name; dies if unknown.
+  return [ $as, $name ];
+} ## end sub utils_parse
+
+
 # Install the named utility functions into the expression package. Functions
 # that were not selected never enter it, so the namespace the expressions see
 # stays limited to what was asked for.
 sub utils_install {
-  my (@names) = @_;
+  my (@utils) = @_;
   no strict 'refs'; ## no critic (ProhibitNoStrict)
-  for my $name (@names) {
-    *{"${EVAL_PACKAGE}::$name"} = utils_get($name);
+  for my $util (@utils) {
+    my ( $as, $name ) = @{$util};
+    *{"${EVAL_PACKAGE}::$as"} = utils_get($name);
   }
   return;
 } ## end sub utils_install

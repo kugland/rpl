@@ -452,21 +452,22 @@ subtest 'from_roman' => sub {
 subtest 'util option' => sub {
   subtest 'Installs into the expression package' => sub {
     my $p = params_get( '--util=to_roman', '-e', 's/(\d+)/to_roman($1)/e', 'a' );
-    is_deeply $p->{utils}, ['to_roman'], 'Selected utility recorded';
+    is_deeply $p->{utils}, [ [ 'to_roman', 'to_roman' ] ], 'Selected utility recorded';
     ok Isolated::Eval::Context->can('to_roman'), 'Installed in expression package';
     is $p->{exprs}[0]{func}->('track 19.mp3'), 'track XIX.mp3', 'Expression can call it';
   }; ## end 'Installs into the expression package' => sub
   subtest 'Installs from_roman into the expression package' => sub {
     my $p = params_get( '-u', 'to_roman,from_roman', '-e', 's/([IVXLCDM]+)/from_roman($1)/e', 'a' );
-    is_deeply $p->{utils}, [ 'to_roman', 'from_roman' ], 'Both utilities recorded in order';
+    is_deeply $p->{utils}, [ [ 'to_roman', 'to_roman' ], [ 'from_roman', 'from_roman' ] ],
+      'Both utilities recorded in order';
     ok Isolated::Eval::Context->can('from_roman'), 'Installed in expression package';
     is $p->{exprs}[0]{func}->('track XIX.mp3'), 'track 19.mp3', 'Expression can call it';
   }; ## end 'Installs from_roman into the expression package' => sub
   subtest 'Accepts short form, repetition and comma-separated lists' => sub {
     my $p = params_get( '-u', 'to_roman', '-e', '$_', 'a' );
-    is_deeply $p->{utils}, ['to_roman'], 'Short form works';
+    is_deeply $p->{utils}, [ [ 'to_roman', 'to_roman' ] ], 'Short form works';
     $p = params_get( '-u', 'to_roman,to_roman', '-u', 'to_roman', '-e', '$_', 'a' );
-    is_deeply $p->{utils}, ['to_roman'], 'Duplicates collapse to one';
+    is_deeply $p->{utils}, [ [ 'to_roman', 'to_roman' ] ], 'Duplicates collapse to one';
   }; ## end 'Accepts short form, repetition and comma-separated lists' => sub
   subtest 'Error handling' => sub {
     throws_ok { params_get( '-u', 'nonexistent', '-e', '$_', 'a' ) }
@@ -477,6 +478,46 @@ subtest 'util option' => sub {
     throws_ok { transform_name( $p, 'track 0.mp3' ) } qr/track\ 0\.mp3/msx, 'Error names the file';
   };
 }; ## end 'util option' => sub
+
+
+subtest 'util aliases' => sub {
+  subtest 'Installs a utility under a custom name' => sub {
+    my $p = params_get( '-u', 'r=to_roman', '-e', 's/(\d+)/r($1)/e', 'a' );
+    is_deeply $p->{utils}, [ [ 'r', 'to_roman' ] ], 'Alias and target recorded as a pair';
+    ok Isolated::Eval::Context->can('r'), 'Installed under the alias';
+    is $p->{exprs}[0]{func}->('track 19.mp3'), 'track XIX.mp3', 'Expression can call it';
+  }; ## end 'Installs a utility under a custom name' => sub
+  subtest 'Leaves the original name out of the expression package' => sub {
+    my $p = params_get( '-u', 'wsp=trim', '-e', '$_', 'a' );
+    ok Isolated::Eval::Context->can('wsp'),   'Installed under the alias';
+    ok !Isolated::Eval::Context->can('trim'), 'Original name absent';
+  };
+  subtest 'Mixes aliased and bare names in one list' => sub {
+    my $p = params_get( '-u', 'nfc=normalize_nfc,unidecode', '-e', '$_', 'a' );
+    is_deeply $p->{utils}, [ [ 'nfc', 'normalize_nfc' ], [ 'unidecode', 'unidecode' ] ],
+      'Both forms recorded in order';
+    ok Isolated::Eval::Context->can('nfc'),       'Aliased name installed';
+    ok Isolated::Eval::Context->can('unidecode'), 'Bare name installed';
+  }; ## end 'Mixes aliased and bare names in one list' => sub
+  subtest 'Collapses an exact duplicate pair' => sub {
+    my $p = params_get( '-u', 'r=to_roman,r=to_roman', '-u', 'r=to_roman', '-e', '$_', 'a' );
+    is_deeply $p->{utils}, [ [ 'r', 'to_roman' ] ], 'Duplicates collapse to one';
+  };
+  subtest 'Error handling' => sub {
+    throws_ok { params_get( '-u', '2fast=to_roman', '-e', '$_', 'a' ) }
+    qr/invalid\ utility\ function\ name/imsx, 'Name that is not an identifier rejected';
+    throws_ok { params_get( '-u', '=to_roman', '-e', '$_', 'a' ) }
+    qr/invalid\ utility\ function\ name/imsx, 'Empty name rejected';
+    throws_ok { params_get( '-u', 'x=nonexistent', '-e', '$_', 'a' ) }
+    qr/unknown\ utility\ function/imsx, 'Unknown utility rejected';
+    throws_ok { params_get( '-u', 'x=r=to_roman', '-e', '$_', 'a' ) }
+    qr/unknown\ utility\ function/imsx, 'Aliases do not chain';
+    throws_ok { params_get( '-u', 'r=to_roman', '-u', 'r=trim', '-e', '$_', 'a' ) }
+    qr/already\ defined\ as\ .to_roman./imsx, 'One name for two utilities rejected';
+    throws_ok { params_get( '-u', 'from_roman,from_roman=trim', '-e', '$_', 'a' ) }
+    qr/already\ defined/imsx, 'Bare name clashing with a custom name rejected';
+  }; ## end 'Error handling' => sub
+}; ## end 'util aliases' => sub
 
 
 subtest 'prebaked utility functions' => sub {
@@ -490,7 +531,7 @@ subtest 'prebaked utility functions' => sub {
   };
   subtest 'Is selected by --util like any other utility' => sub {
     my $p = params_get( '-u', 'strip_diacritics', '-e', 's/(.+)/strip_diacritics($1)/e', 'a' );
-    is_deeply $p->{utils}, ['strip_diacritics'], 'Selected utility recorded';
+    is_deeply $p->{utils}, [ [ 'strip_diacritics', 'strip_diacritics' ] ], 'Selected utility recorded';
     ok Isolated::Eval::Context->can('strip_diacritics'), 'Installed in expression package';
     is $p->{exprs}[0]{func}->('Ação'), 'Acao', 'Expression can call it';
   }; ## end 'Is selected by --util like any other utility' => sub
