@@ -272,16 +272,16 @@ expressions; the rest never enter the namespace.
 These are the available utility functions (you can also list them by running
 `rpl --list-utils`):
 
-- `to_roman_numeral($n)`: Convert an integer between 1 and 3999 to a Roman
+- `to_roman($n)`: Convert an integer between 1 and 3999 to a Roman
   numeral.
 
 ```console
 # Turn chapter numbers into Roman numerals:
-rpl -u to_roman_numeral -e 's/(\d+)/to_roman_numeral($1)/e' *.txt
+rpl -u to_roman -e 's/(\d+)/to_roman($1)/e' *.txt
 # `chapter 19.txt' -> `chapter XIX.txt'
 
 # Several functions at once (repeat -u, or separate names with commas):
-rpl -u to_roman_numeral,other_function -e '...' *
+rpl -u to_roman,other_function -e '...' *
 ```
 
 > [!NOTE]
@@ -290,13 +290,13 @@ rpl -u to_roman_numeral,other_function -e '...' *
 
 > [!NOTE]
 > A utility function given input it cannot handle aborts the run with an error
-> naming the offending file. `to_roman_numeral` does this for `0`, negative
+> naming the offending file. `to_roman` does this for `0`, negative
 > numbers, non-integers, and anything above `3999`:
 >
 > ```console
-> $ rpl -au to_roman_numeral -e 's/(\d+)/to_roman_numeral($1)/e' *.txt
-> Expression 's/(\d+)/to_roman_numeral($1)/e' failed on 'ch 0.txt':
-> to_roman_numeral: `0' is not an integer between 1 and 3999
+> $ rpl -au to_roman -e 's/(\d+)/to_roman($1)/e' *.txt
+> Expression 's/(\d+)/to_roman($1)/e' failed on 'ch 0.txt':
+> to_roman: `0' is not an integer between 1 and 3999
 > ```
 >
 > All new names are computed before any file is renamed, so an abort leaves

@@ -337,11 +337,11 @@ sub prebaked_list {
 
 
 # Convert an integer in the range 1..3999 to a Roman numeral.
-sub to_roman_numeral {
+sub to_roman {
   ## no critic (ProhibitMagicNumbers) -- the numerals below are the domain's own values.
   my ($value) = @_;
   $value //= q{};
-  die "to_roman_numeral: `$value' is not an integer between 1 and 3999\n"
+  die "to_roman: `$value' is not an integer between 1 and 3999\n"
     if $value !~ m{ \A \d+ \z }msx or $value < 1 or $value > 3999;
   state @NUMERALS = (
     [ 1000, 'M' ], [ 900, 'CM' ], [ 500, 'D' ], [ 400, 'CD' ],
@@ -358,15 +358,15 @@ sub to_roman_numeral {
     }
   } ## end for my $numeral (@NUMERALS)
   return $roman;
-} ## end sub to_roman_numeral
+} ## end sub to_roman
 
 
 # Utility functions, made visible to the expressions by --util.
 my %UTIL_FUNCTIONS = (
-  'to_roman_numeral' => {
-    sig  => 'to_roman_numeral($n)',
+  'to_roman' => {
+    sig  => 'to_roman($n)',
     desc => 'Convert an integer between 1 and 3999 to a Roman numeral',
-    func => \&to_roman_numeral,
+    func => \&to_roman,
   },
 );
 

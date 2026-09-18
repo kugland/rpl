@@ -330,7 +330,7 @@ subtest 'prebaked exprs' => sub {
 
 
 # Parse a Roman numeral back to an integer. Test-only inverse of
-# `to_roman_numeral`, used to round-trip the whole 1..3999 range.
+# `to_roman`, used to round-trip the whole 1..3999 range.
 sub roman_to_int {
   my ($roman) = @_;
   my %value   = ( I => 1, V => 5, X => 10, L => 50, C => 100, D => 500, M => 1000 );
@@ -346,15 +346,15 @@ sub roman_to_int {
 # NOTE: installing a utility mutates the expression package process-wide, so
 # this subtest must stay ahead of every subtest that calls `utils_install`.
 subtest 'utils absent until selected' => sub {
-  ok !Isolated::Eval::Context->can('to_roman_numeral'), 'Not in expression package before selection';
+  ok !Isolated::Eval::Context->can('to_roman'), 'Not in expression package before selection';
   my $p = params_get( '-e', '$_', 'a' );
-  ok !Isolated::Eval::Context->can('to_roman_numeral'), 'Still absent when --util is not given';
+  ok !Isolated::Eval::Context->can('to_roman'), 'Still absent when --util is not given';
 };
 
 
 subtest 'utils_get' => sub {
   subtest 'Gets known utility function' => sub {
-    my $func = utils_get('to_roman_numeral');
+    my $func = utils_get('to_roman');
     is ref $func, 'CODE', 'Returns a coderef';
   };
   subtest 'Error handling' => sub {
@@ -367,14 +367,14 @@ subtest 'utils_list' => sub {
   my ( $exit, $out, $err ) = capture_sub_output( sub { utils_list() } );
   is $exit, 0, 'Exits successfully';
   like $out, qr/The following utility functions are available:/sm, 'Header present';
-  like $out, qr/to_roman_numeral/sm,                               'Lists to_roman_numeral';
+  like $out, qr/to_roman/sm,                                       'Lists to_roman';
   is $err, q{}, 'No stderr output';
 }; ## end 'utils_list' => sub
 
 
-subtest 'to_roman_numeral' => sub {
+subtest 'to_roman' => sub {
   ## no critic (ProhibitMagicNumbers) -- the numerals below are the domain's own values.
-  my $to_roman = utils_get('to_roman_numeral');
+  my $to_roman = utils_get('to_roman');
   subtest 'Converts integers in range' => sub {
     my @CASES = (
       [ 1,    'I' ],      [ 2,    'II' ], [ 3,    'III' ],  [ 4,   'IV' ],
@@ -396,31 +396,31 @@ subtest 'to_roman_numeral' => sub {
   };
   subtest 'Rejects out-of-range and non-numeric input' => sub {
     for my $bad ( 0, -1, 4000, 10_000, 'foo', q{}, '3.5', '1e3', ' 19', '19 ', '+19' ) {
-      throws_ok { $to_roman->($bad) } qr/to_roman_numeral/ism, "Dies on `$bad'";
+      throws_ok { $to_roman->($bad) } qr/to_roman/ism, "Dies on `$bad'";
     }
   };
-}; ## end 'to_roman_numeral' => sub
+}; ## end 'to_roman' => sub
 
 
 subtest 'util option' => sub {
   subtest 'Installs into the expression package' => sub {
-    my $p = params_get( '--util=to_roman_numeral', '-e', 's/(\d+)/to_roman_numeral($1)/e', 'a' );
-    is_deeply $p->{utils}, ['to_roman_numeral'], 'Selected utility recorded';
-    ok Isolated::Eval::Context->can('to_roman_numeral'), 'Installed in expression package';
+    my $p = params_get( '--util=to_roman', '-e', 's/(\d+)/to_roman($1)/e', 'a' );
+    is_deeply $p->{utils}, ['to_roman'], 'Selected utility recorded';
+    ok Isolated::Eval::Context->can('to_roman'), 'Installed in expression package';
     is $p->{exprs}[0]{func}->('track 19.mp3'), 'track XIX.mp3', 'Expression can call it';
   }; ## end 'Installs into the expression package' => sub
   subtest 'Accepts short form, repetition and comma-separated lists' => sub {
-    my $p = params_get( '-u', 'to_roman_numeral', '-e', '$_', 'a' );
-    is_deeply $p->{utils}, ['to_roman_numeral'], 'Short form works';
-    $p = params_get( '-u', 'to_roman_numeral,to_roman_numeral', '-u', 'to_roman_numeral', '-e', '$_', 'a' );
-    is_deeply $p->{utils}, ['to_roman_numeral'], 'Duplicates collapse to one';
+    my $p = params_get( '-u', 'to_roman', '-e', '$_', 'a' );
+    is_deeply $p->{utils}, ['to_roman'], 'Short form works';
+    $p = params_get( '-u', 'to_roman,to_roman', '-u', 'to_roman', '-e', '$_', 'a' );
+    is_deeply $p->{utils}, ['to_roman'], 'Duplicates collapse to one';
   }; ## end 'Accepts short form, repetition and comma-separated lists' => sub
   subtest 'Error handling' => sub {
     throws_ok { params_get( '-u', 'nonexistent', '-e', '$_', 'a' ) }
     qr/unknown utility function/ism, 'Unknown utility rejected';
   };
   subtest 'Errors from a utility name the file and expression' => sub {
-    my $p = params_get( '--util=to_roman_numeral', '-e', 's/(\d+)/to_roman_numeral($1)/e', 'track 0.mp3' );
+    my $p = params_get( '--util=to_roman', '-e', 's/(\d+)/to_roman($1)/e', 'track 0.mp3' );
     throws_ok { transform_name( $p, 'track 0.mp3' ) } qr/track\ 0\.mp3/msx, 'Error names the file';
   };
 }; ## end 'util option' => sub
@@ -644,7 +644,7 @@ subtest 'main function' => sub {
     my ( $exit, $out, $err ) = capture_sub_output( sub { local @ARGV = qw{--list-utils}; main() } );
     is $exit, 0, 'List-utils exits successfully';
     like $out, qr/The following utility functions are available:/sm, 'List output present';
-    like $out, qr/to_roman_numeral/sm,                               'Lists to_roman_numeral';
+    like $out, qr/to_roman/sm,                                       'Lists to_roman';
   }; ## end 'List utils' => sub
   # Characterization test: this behaviour predates --util (transform_names
   # computes every new name before perform_renames runs), but the README now
@@ -656,8 +656,8 @@ subtest 'main function' => sub {
     create_file( "$temp/ch 5.txt", 'five' );
     my ( $exit, $out, $err ) = run_script(
       { cwd => $temp },
-      '-au',      'to_roman_numeral', '-e', 's/(\d+)/to_roman_numeral($1)/e',
-      'ch 1.txt', 'ch 0.txt',         'ch 5.txt',
+      '-au',      'to_roman', '-e', 's/(\d+)/to_roman($1)/e',
+      'ch 1.txt', 'ch 0.txt', 'ch 5.txt',
     );
     is $exit, 1, 'Exits with an error';
     like $err, qr/ch\ 0\.txt/msx,       'Error names the offending file';
