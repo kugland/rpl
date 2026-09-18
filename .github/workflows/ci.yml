@@ -4,9 +4,13 @@ on:
   push:
     branches: [ '*' ]
 
+permissions:
+  contents: read
+  actions: write # required by cache-nix-action's purge
+
 jobs:
-  critic:
-    name: "perlcritic"
+  check:
+    name: "perlcritic + prove"
     runs-on: ubuntu-latest
 
     steps:
@@ -15,20 +19,21 @@ jobs:
 
     - name: Install Nix
       uses: DeterminateSystems/nix-installer-action@v22
+
+    - name: Restore and save Nix store
+      uses: nix-community/cache-nix-action@v7
+      with:
+        primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.nix', 'flake.lock', 'package.nix') }}
+        restore-prefixes-first-match: nix-${{ runner.os }}-
+        purge: true
+        purge-prefixes: nix-${{ runner.os }}-
+        purge-created: 0
+        purge-primary-key: never
 
     - name: Run perlcritic
       run: nix develop -c perlcritic --brutal ./rpl ./rpl.t
 
-  test:
-    name: "prove"
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v7
-
-    - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@v22
-
+    # Run even if perlcritic failed, so one push reports both lint and test results.
     - name: Run tests with prove
+      if: ${{ !cancelled() }}
       run: nix develop -c prove ./rpl.t
